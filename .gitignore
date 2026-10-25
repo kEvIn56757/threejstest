@@ -1,0 +1,11 @@
+node_modules/
+package-lock.json
+*.log
+shot*.js
+export-test.js
+diag.js
+w_*.png
+x_*.png
+y_*.png
+z_*.png
+t.js
