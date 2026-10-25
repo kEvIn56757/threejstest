@@ -25,8 +25,8 @@ function stripModuleSyntax(src, label) {
 const coreS = stripModuleSyntax(core, 'core');
 const modS = stripModuleSyntax(mod, 'module');
 
-// collect THREE.<name> used by app
-const used = [...new Set([...app.matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
+// collect THREE.<name> used by app + model builders + exporter
+const used = [...new Set([...[app, modelUps, exporter].join('\n').matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
 
 // verify each used name is declared somewhere in the three sources
 const declRe = name => new RegExp('(?:function|class|const|let|var)\\s+' + name + '\\b');
