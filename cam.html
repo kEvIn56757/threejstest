@@ -80997,17 +80997,15 @@ function buildRonkUPS(THREE) {
     t.anisotropy = 8;
     return t;
   }
-  // LCD(偏暗的蓝灰屏)
+  // LCD(关机黑屏,仅玻璃反光)
   const texLCD = makeCanvasTex(256, 128, (g, w, h) => {
     const grad = g.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, '#9db4c9'); grad.addColorStop(0.5, '#7290ab'); grad.addColorStop(1, '#5a768f');
+    grad.addColorStop(0, '#15191e'); grad.addColorStop(0.45, '#0b0d10'); grad.addColorStop(1, '#060708');
     g.fillStyle = grad; g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(40,60,80,0.30)';
-    for (let i = 0; i < 3; i++) g.fillRect(30, 32 + i * 28, 110 + (i % 2) * 55, 10);
-    g.fillStyle = 'rgba(40,60,80,0.20)';
-    g.fillRect(170, 32, 56, 66);
+    g.fillStyle = 'rgba(255,255,255,0.055)';
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(w * 0.52, 0); g.lineTo(0, h * 0.66); g.fill();
   });
-  const matLCD = new THREE.MeshStandardMaterial({ map: texLCD, roughness: 0.22, metalness: 0.1 });
+  const matLCD = new THREE.MeshStandardMaterial({ map: texLCD, roughness: 0.14, metalness: 0.08 });
   matLCD.name = 'lcd_screen';
   // RONK logo
   const texLogo = makeCanvasTex(512, 160, (g) => {
@@ -81152,7 +81150,7 @@ function buildRonkUPS(THREE) {
   box(72, 85.5, 1.2, matShell, 0, 42.75, 16.4, shell, true);     // 右侧板
   box(72, 85.5, 1.2, matShell, 0, 42.75, -16.4, shell, true);    // 左侧板
   box(70.8, 1.2, 34, matShell, 0, 84.9, 0, shell, true);         // 顶盖
-  box(70.8, 1.2, 34, matShell, 0, 0.6, 0, shell, true);          // 底板
+  box(70.8, 1.2, 34, matShell, 0, 0.6, 0, interior, false);      // 底板(内部视图保留)
 
   // 四角圆弧包边(竖向圆角压条)
   [[35.7, 16.55], [35.7, -16.55], [-35.7, 16.55], [-35.7, -16.55]].forEach(([x, z]) => {
@@ -81221,10 +81219,11 @@ function buildRonkUPS(THREE) {
   box(0.5, 6.6, 10.8, matBezel, 36.5, 68.2, 1.2, shell, true);
   planeYZ(9.8, 5.5, matLCD, 36.79, 68.2, 1.2, shell, true);
 
-  // 3 只金属按钮(竖排,右侧)+ 各自绿色指示灯
-  [68.1, 63.7, 59.3].forEach((y, i) => {
-    cylX(1.52, 0.14, matPanel, 36.48, y, -8.35, shell, true);   // 沉孔圈
-    cylX(1.35, 0.55, matButton, 36.62, y, -8.35, shell, true);  // 钮帽
+  // 3 只金属按钮(竖排,右侧;金属环+暗缝+钮面)+ 各自绿色指示灯
+  [68.1, 63.7, 59.3].forEach(y => {
+    cylX(1.55, 0.18, matButton, 36.5, y, -8.35, shell, true);   // 金属外环
+    cylX(1.18, 0.22, matGrille, 36.53, y, -8.35, shell, true); // 暗缝
+    cylX(1.02, 0.52, matMetal, 36.68, y, -8.35, shell, true);  // 钮面
     cylX(0.26, 0.2, matLedG, 36.56, y + 1.8, -6.6, shell, true); // 绿 LED
   });
 
@@ -81291,7 +81290,7 @@ function buildRonkUPS(THREE) {
     box(0.22, 1.35, 2.9, matToggle, -36.33, 76.1, z, shell, true);     // 针芯
     cylX(0.22, 0.25, matMetal, -36.42, 76.1, z - 1.75, shell, true);   // 固定螺钉
     cylX(0.22, 0.25, matMetal, -36.42, 76.1, z + 1.75, shell, true);
-    planeZY(4.3, 1.35, lbl, -36.31, 72.3, z);                          // 名牌
+    planeZY(4.3, 1.35, lbl, -36.31, 73.0, z);                          // 名牌
   });
 
   // 12 位绿色干接点端子 + 号码表
@@ -81321,7 +81320,7 @@ function buildRonkUPS(THREE) {
   });
 
   // 左侧散热槽:4 组 × 10 条横圆槽
-  [68.65, 58.5, 47.95, 37.5].forEach(gy => {
+  [66.5, 57, 47.5, 38].forEach(gy => {
     for (let i = 0; i < 10; i++) {
       const slot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 9.5, 12), matGrille);
       slot.rotation.x = Math.PI / 2;
@@ -81330,51 +81329,48 @@ function buildRonkUPS(THREE) {
     }
   });
 
-  // 断路器:5P(输入/输出)+ 2P 维修旁路 —— 白壳蓝钮微型断路器
+  // 断路器:5P(输入/输出)+ 2P 维修旁路 —— 空开式白壳模块 + 蓝色闸刀手柄
   const mcb = (z, y) => {
-    box(1.55, 4.9, 2.2, matBreaker, -36.55, y, z, shell, true);
-    const t = box(0.85, 2.1, 0.95, matBlue, -36.98, y + 0.55, z, shell, true);
-    t.rotation.z = -0.32;
-    box(0.12, 0.55, 1.8, matToggle, -37.36, y + 1.85, z, shell, true);
+    box(1.6, 5.2, 2.25, matBreaker, -36.55, y, z, shell, true);        // 白色模块
+    box(0.55, 3.0, 1.6, matBreaker, -37.25, y + 0.2, z, shell, true);  // 手柄座
+    const t = box(1.15, 2.5, 1.35, matBlue, -37.75, y + 0.45, z, shell, true); // 蓝色闸刀手柄
+    t.rotation.z = -0.38;
+    box(0.12, 0.5, 1.85, matToggle, -37.38, y + 2.15, z, shell, true); // 顶部小铭牌
   };
-  box(0.5, 11, 13.75, matTermBase, -36.1, 19.4, -3.35, shell, true);
-  for (let i = 0; i < 5; i++) mcb(-8.1 + i * 2.6, 19.85);
-  box(0.5, 11, 5.0, matTermBase, -36.1, 19.4, 8.5, shell, true);
-  [7.1, 9.6].forEach(z => mcb(z, 19.85));
+  box(0.5, 9, 13.75, matTermBase, -36.1, 19.7, -3.35, shell, true);
+  for (let i = 0; i < 5; i++) mcb(-8.1 + i * 2.6, 19.7);
+  box(0.5, 9, 5.0, matTermBase, -36.1, 19.7, 8.5, shell, true);
+  [7.1, 9.6].forEach(z => mcb(z, 19.7));
   // 框架螺钉
-  [-10.25, -6.9, -3.55, -0.2, 3.15].forEach(z => {
-    cylX(0.26, 0.2, matMetal, -36.42, 24.4, z, shell, true);
-    cylX(0.26, 0.2, matMetal, -36.42, 14.4, z, shell, true);
+  [-10.25, -6.9, -3.55, -0.2, 3.15, 6.0, 11.0].forEach(z => {
+    cylX(0.26, 0.2, matMetal, -36.42, 23.7, z, shell, true);
+    cylX(0.26, 0.2, matMetal, -36.42, 15.7, z, shell, true);
   });
-  [6.0, 11.0].forEach(z => {
-    cylX(0.26, 0.2, matMetal, -36.42, 24.4, z, shell, true);
-    cylX(0.26, 0.2, matMetal, -36.42, 14.4, z, shell, true);
-  });
-  cylX(0.26, 0.2, matMetal, -36.42, 19.4, -10.25, shell, true);
-  cylX(0.26, 0.2, matMetal, -36.42, 19.4, 3.5, shell, true);
-  cylX(0.26, 0.2, matMetal, -36.42, 19.4, 6.0, shell, true);
-  cylX(0.26, 0.2, matMetal, -36.42, 19.4, 11.0, shell, true);
+  cylX(0.26, 0.2, matMetal, -36.42, 19.7, -10.25, shell, true);
+  cylX(0.26, 0.2, matMetal, -36.42, 19.7, 3.5, shell, true);
+  cylX(0.26, 0.2, matMetal, -36.42, 19.7, 6.0, shell, true);
+  cylX(0.26, 0.2, matMetal, -36.42, 19.7, 11.0, shell, true);
   // 标签:输入 / 输出 / 维修开关
   planeZY(3.25, 1.7, matLblIn, -36.31, 27.7, -7.65);
   planeZY(3.25, 1.7, matLblOut, -36.31, 27.7, -2.6);
   planeZY(4.0, 1.7, matLblMaint, -36.31, 27.7, 8.5);
 
   // 底部大电流动力端子排(2×10 黄铜方块,相间隔板)
-  box(0.8, 9, 25.25, matTermBase, -36.2, 10.7, -0.1, shell, true);
+  box(0.8, 8, 25.25, matTermBase, -36.2, 9.2, -0.1, shell, true);
   for (let i = 0; i < 10; i++) {
     const z = -6.75 + i * 1.7;
-    [12.7, 9.2].forEach(y => {
+    [11.2, 7.7].forEach(y => {
       box(1.15, 1.7, 1.35, matBrass, -36.85, y, z, shell, true);
       cylX(0.34, 0.3, matToggle, -37.55, y, z, shell, true); // 螺钉头
     });
-    box(1.3, 7.4, 0.22, matToggle, -36.8, 10.7, z + 0.85, shell, true); // 相间隔板
+    box(1.3, 6.6, 0.22, matToggle, -36.8, 9.2, z + 0.85, shell, true); // 相间隔板
   }
-  box(1.3, 7.4, 0.22, matToggle, -36.8, 10.7, -7.6, shell, true);
+  box(1.3, 6.6, 0.22, matToggle, -36.8, 9.2, -7.6, shell, true);
   // 两端接线座
   [-10.25, 10.75].forEach(z => {
-    box(1.3, 3.6, 3.0, matTermBase, -36.8, 10.9, z, shell, true);
-    cylX(0.3, 0.3, matMetal, -37.6, 12.2, z, shell, true);
-    cylX(0.3, 0.3, matMetal, -37.6, 9.6, z, shell, true);
+    box(1.3, 3.2, 3.0, matTermBase, -36.8, 9.2, z, shell, true);
+    cylX(0.3, 0.3, matMetal, -37.6, 10.5, z, shell, true);
+    cylX(0.3, 0.3, matMetal, -37.6, 7.9, z, shell, true);
   });
 
   // 后面板角螺栓
@@ -81417,40 +81413,40 @@ function buildRonkUPS(THREE) {
   [-11.7, -3.9, 3.9, 11.7].forEach(z => interior.add(makeBattery(4, 39, z)));
   [-11.7, -3.9, 3.9, 11.7].forEach(z => interior.add(makeBattery(4, 60.2, z)));
 
-  // 下层:电脑主机(塔式机箱)
+  // 下层:小机箱(准系统塔式,36×30×16)
   {
     const pc = new THREE.Group();
-    const caseBody = new THREE.Mesh(new THREE.BoxGeometry(45, 42, 20), matPC);
+    const caseBody = new THREE.Mesh(new THREE.BoxGeometry(36, 30, 16), matPC);
     caseBody.castShadow = true;
-    const front = new THREE.Mesh(new THREE.BoxGeometry(0.7, 41, 19.2), matPCFront);
-    front.position.x = 24.7;
-    const power = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.28, 20), matPwr);
+    const front = new THREE.Mesh(new THREE.BoxGeometry(0.7, 29, 15.2), matPCFront);
+    front.position.x = 18.3;
+    const power = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.28, 20), matPwr);
     power.rotation.z = Math.PI / 2;
-    power.position.set(25.18, 37, -5.5);
-    const reset = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.25, 16), matToggle);
+    power.position.set(18.85, 11.5, -2.0);
+    const reset = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.25, 16), matToggle);
     reset.rotation.z = Math.PI / 2;
-    reset.position.set(25.16, 37, -8.4);
+    reset.position.set(18.83, 11.5, -4.0);
     pc.add(caseBody, front, power, reset);
-    [-5.5, -8.0].forEach(z => {
-      const usb = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 1.65), matUSB);
-      usb.position.set(25.12, 32.6, z);
+    [-2.0, -4.0].forEach(z => {
+      const usb = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.62, 1.5), matUSB);
+      usb.position.set(18.8, 8.0, z);
       pc.add(usb);
     });
-    [-10.8, -12.4].forEach(z => {
-      const jack = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.22, 14), matUSB);
+    [-5.4, -6.5].forEach(z => {
+      const jack = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.22, 14), matUSB);
       jack.rotation.z = Math.PI / 2;
-      jack.position.set(25.12, 32.6, z);
+      jack.position.set(18.8, 8.0, z);
       pc.add(jack);
     });
-    const bay = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.7, 12.5), matToggle);
-    bay.position.set(25.12, 39.6, 2.5);
+    const bay = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.4, 8), matToggle);
+    bay.position.set(18.82, 12.8, 3.4);
     pc.add(bay);
-    for (let i = 0; i < 6; i++) {
-      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.32, 9.5, 1.05), matGrille);
-      vent.position.set(25.1, 8.8, -6.5 + i * 2.6);
+    for (let i = 0; i < 5; i++) {
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.3, 7, 0.9), matGrille);
+      vent.position.set(18.8, -8.5, -3.6 + i * 1.8);
       pc.add(vent);
     }
-    pc.position.set(2, 22.2, 0);
+    pc.position.set(8, 16.4, 0);
     interior.add(pc);
   }
 
