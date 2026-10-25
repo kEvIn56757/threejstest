@@ -50,6 +50,7 @@ function main() {
     setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; sph.radius = r; applyCamera(); },
     setSpin(on) { spin = on; },
     setRot(y) { pivot.rotation.y = y; },
+    model: () => currentModel,
     logo() { makeLogoTexture(); return makeLogoTexture.lastCanvas.toDataURL('image/png'); },
     list() {
       const out = [];
@@ -90,7 +91,7 @@ function main() {
   el.addEventListener('pointercancel', () => { dragging = false; });
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    sph.radius = THREE.MathUtils.clamp(sph.radius * Math.exp(e.deltaY * 0.0012), 11, 42);
+    sph.radius = THREE.MathUtils.clamp(sph.radius * Math.exp(e.deltaY * 0.0012), 11, 300);
     applyCamera();
   }, { passive: false });
 
@@ -131,6 +132,7 @@ function main() {
   // { id: '唯一ID', name: '下拉列表显示名', build: 构建函数(返回 THREE.Group) }
   const MODELS = [
     { id: 'hikvision-bullet', name: '海康威视枪机', build: buildCamera },
+    { id: 'ronk-ups', name: 'RONK 工业UPS机柜', build: buildRonkUPS },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -155,18 +157,36 @@ function main() {
       pivot.remove(currentModel);
       currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
     }
-    currentModel = rec.build();
+    currentModel = rec.build(THREE);
     pivot.add(currentModel);
     nameModel();
-    // 自动取景:按包围球调整轨道半径,让不同大小的模型都合适
+    // 自动取景:模型垂直居中到原点,按包围球调整轨道半径,让不同大小的模型都合适
     const box = new THREE.Box3().setFromObject(currentModel);
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    sph.radius = THREE.MathUtils.clamp(sphere.radius * 2.6, 11, 42);
+    currentModel.position.y -= (box.min.y + box.max.y) / 2;
+    const box2 = new THREE.Box3().setFromObject(currentModel);
+    const sphere = box2.getBoundingSphere(new THREE.Sphere());
+    sph.radius = THREE.MathUtils.clamp(sphere.radius * 1.9, 11, 300);
+    // 阴影相机随模型大小自适应(小模型保持原参数不变)
+    const sr = Math.max(13, sphere.radius * 1.15);
+    key.shadow.camera.left = -sr; key.shadow.camera.right = sr;
+    key.shadow.camera.top = sr; key.shadow.camera.bottom = -sr;
+    key.shadow.camera.far = Math.max(50, sr * 4);
+    key.position.set(9, 13, -7).normalize().multiplyScalar(Math.max(17.5, sphere.radius * 2.2));
+    key.shadow.normalBias = Math.max(0.02, sphere.radius * 0.004);
+    key.shadow.camera.updateProjectionMatrix();
+    // 阴影地面贴到模型脚下
+    ground.position.y = box2.min.y;
     applyCamera();
+    // 重置外壳显示
+    shellOn = true;
+    currentModel.traverse(o => { if (o.isMesh && o.userData.shell) o.visible = true; });
+    const b = document.getElementById('btn-shell');
+    if (b) b.textContent = '查看内部';
     return rec;
   }
 
-  // ---------- 模型下拉列表 ----------
+  // ---------- 模型下拉列表 + 内部透视 ----------
+  let shellOn = true;
   const sel = document.getElementById('model-select');
   if (sel) {
     for (const m of MODELS) {
@@ -176,6 +196,14 @@ function main() {
       sel.appendChild(opt);
     }
     sel.addEventListener('change', () => setModel(sel.value));
+  }
+  const shellBtn = document.getElementById('btn-shell');
+  if (shellBtn) {
+    shellBtn.addEventListener('click', () => {
+      shellOn = !shellOn;
+      currentModel.traverse(o => { if (o.isMesh && o.userData.shell) o.visible = shellOn; });
+      shellBtn.textContent = shellOn ? '查看内部' : '显示外壳';
+    });
   }
   setModel(MODELS[0].id);
 

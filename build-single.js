@@ -4,6 +4,7 @@ const fs = require('fs');
 const core = fs.readFileSync('vendor/three.core.js', 'utf8');
 const mod = fs.readFileSync('vendor/three.module.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
+const modelUps = fs.readFileSync('ronk-ups.js', 'utf8');
 const app = fs.readFileSync('app.js', 'utf8');
 
 function stripModuleSyntax(src, label) {
@@ -43,7 +44,7 @@ if (appBody.includes('await import')) {
 }
 
 const threeList = used.sort().join(', ');
-const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${exporter}\n${appBody}`;
+const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${exporter}\n${modelUps}\n${appBody}`;
 
 const html = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -76,6 +77,7 @@ const html = `<!DOCTYPE html>
 <body>
 <div id="tools">
   <select id="model-select" title="选择模型"></select>
+  <button id="btn-shell" title="隐藏/显示外壳,查看内部结构">查看内部</button>
   <button id="btn-fbx" title="导出 model.fbx + 贴图 PNG,可导入 Blender / Unity">导出 FBX</button>
   <button id="btn-glb" title="导出 model.glb(贴图内嵌,单文件)">导出 GLB</button>
 </div>

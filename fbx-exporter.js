@@ -13,7 +13,7 @@ const EXPORT_SCALE_DEFAULT = 0.01; // cm -> m
 function collectMeshes(scene) {
   const list = [];
   scene.traverse(o => {
-    if (o.isMesh && !o.userData.noExport && o.visible) list.push(o);
+    if (o.isMesh && !o.userData.noExport) list.push(o); // 隐藏的外壳也导出(内部结构完整保留)
   });
   return list;
 }
