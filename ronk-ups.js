@@ -12,6 +12,10 @@ function buildRonkUPS(THREE) {
   matShell.name = 'shell_ral9005';
   const matPanel = new THREE.MeshStandardMaterial({ color: 0x363b41, roughness: 0.54, metalness: 0.24, emissive: 0x161a1f, emissiveIntensity: 1 });
   matPanel.name = 'front_panel';
+  const matPanelIn = new THREE.MeshStandardMaterial({ color: 0x2e3238, roughness: 0.56, metalness: 0.22, emissive: 0x121519, emissiveIntensity: 1 });
+  matPanelIn.name = 'front_panel_inner';
+  const matTrim = new THREE.MeshStandardMaterial({ color: 0x646b73, roughness: 0.55, metalness: 0.18 });
+  matTrim.name = 'gray_trim';
   const matGroove = new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: 0.62, metalness: 0.2, emissive: 0x0c0e11, emissiveIntensity: 1 });
   matGroove.name = 'top_band';
   const matGrille = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.78 });
@@ -278,52 +282,74 @@ function buildRonkUPS(THREE) {
   // RONK logo(左上)
   planeYZ(7.2, 2.0, matLogo, 36.08, 76.8, 9.8, shell, true);
 
-  // 控制面板(26.2 × 18.2,圆角底,带凹槽边框)
+  // 控制面板(按实拍重做):外板 25 宽异形(底部宽弧裙)+ 内台双层台阶
   {
-    const pw = 13.1, pT = 9.1, rt = 1.6, rb = 5.2;
+    // 外板轮廓:上圆角、两侧立边、底部宽弧
     const s = new THREE.Shape();
-    s.moveTo(-pw + rt, pT);
-    s.lineTo(pw - rt, pT);
-    s.quadraticCurveTo(pw, pT, pw, pT - rt);
-    s.lineTo(pw, -pT + rb);
-    s.quadraticCurveTo(pw, -pT, pw - rb, -pT);
-    s.lineTo(-pw + rb, -pT);
-    s.quadraticCurveTo(-pw, -pT, -pw, -pT + rb);
-    s.lineTo(-pw, pT - rt);
-    s.quadraticCurveTo(-pw, pT, -pw + rt, pT);
-    const border = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.35, bevelEnabled: false }), matGrille);
-    border.rotation.y = Math.PI / 2;
-    border.position.set(35.42, 64.6, -0.2);
-    border.userData.shell = true;
-    shell.add(border);
-    const p = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.75, bevelEnabled: false }), matPanel);
-    p.rotation.y = Math.PI / 2;
-    p.position.set(35.62, 64.6, -0.2);
-    p.castShadow = true;
-    p.userData.shell = true;
-    shell.add(p);
+    s.moveTo(-11.25, 72.1);
+    s.lineTo(11.25, 72.1);
+    s.quadraticCurveTo(12.45, 72.1, 12.45, 70.9);
+    s.lineTo(12.45, 64.2);
+    s.bezierCurveTo(12.45, 61.6, 7.0, 60.85, 0, 60.85);
+    s.bezierCurveTo(-7.0, 60.85, -12.45, 61.6, -12.45, 64.2);
+    s.lineTo(-12.45, 70.9);
+    s.quadraticCurveTo(-12.45, 72.1, -11.25, 72.1);
+    const outer = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.26, bevelEnabled: false }), matPanel);
+    outer.rotation.y = Math.PI / 2;
+    outer.position.set(35.96, 0, -0.08);
+    outer.castShadow = true;
+    outer.userData.shell = true;
+    shell.add(outer);
+
+    // 内台(比外板凸出 0.12,承载 LCD/按钮/按键排),底缘同样微弧
+    const s2 = new THREE.Shape();
+    s2.moveTo(-8.35, 71.4);
+    s2.lineTo(8.35, 71.4);
+    s2.quadraticCurveTo(9.35, 71.4, 9.35, 70.4);
+    s2.lineTo(9.35, 63.2);
+    s2.bezierCurveTo(9.35, 62.35, 5.2, 61.95, 0, 61.95);
+    s2.bezierCurveTo(-5.2, 61.95, -9.35, 62.35, -9.35, 63.2);
+    s2.lineTo(-9.35, 70.4);
+    s2.quadraticCurveTo(-9.35, 71.4, -8.35, 71.4);
+    const inner = new THREE.Mesh(new THREE.ExtrudeGeometry(s2, { depth: 0.24, bevelEnabled: false }), matPanelIn);
+    inner.rotation.y = Math.PI / 2;
+    inner.position.set(36.1, 0, -0.35);
+    inner.castShadow = true;
+    inner.userData.shell = true;
+    shell.add(inner);
   }
 
-  // LCD(中偏左)
-  box(0.5, 6.6, 10.8, matBezel, 36.5, 68.2, 1.2, shell, true);
-  planeYZ(9.8, 5.5, matLCD, 36.79, 68.2, 1.2, shell, true);
+  // LCD 模块(按实拍:灰框 10.3×5.7 + 黑框 9.05×4.3 + 黑屏 7.7×2.4,居中偏左 z+1.84)
+  box(0.24, 5.7, 10.3, matTrim, 36.46, 68.1, 1.84, shell, true);
+  box(0.26, 4.3, 9.05, matBezel, 36.47, 68.1, 1.84, shell, true);
+  planeYZ(7.7, 2.4, matLCD, 36.615, 68.1, 1.84, shell, true);
 
-  // 3 只金属按钮(竖排,右侧;金属环+暗缝+钮面)+ 各自绿色指示灯
-  [68.1, 63.7, 59.3].forEach(y => {
-    cylX(1.55, 0.18, matButton, 36.5, y, -8.35, shell, true);   // 金属外环
-    cylX(1.18, 0.22, matGrille, 36.53, y, -8.35, shell, true); // 暗缝
-    cylX(1.02, 0.52, matMetal, 36.68, y, -8.35, shell, true);  // 钮面
-    cylX(0.26, 0.2, matLedG, 36.56, y + 1.8, -6.6, shell, true); // 绿 LED
+  // 3 只大按钮(内台右侧竖排):暗环+铬环+暗缝+金属钮面+中心点,各带绿色指示灯
+  [69.4, 66.6, 63.9].forEach(y => {
+    cylX(0.90, 0.30, matToggle, 36.49, y, -8.0, shell, true);
+    cylX(0.78, 0.32, matButton, 36.50, y, -8.0, shell, true);
+    cylX(0.52, 0.34, matGrille, 36.51, y, -8.0, shell, true);
+    cylX(0.40, 0.36, matMetal, 36.52, y, -8.0, shell, true);
+    cylX(0.07, 0.38, matGrille, 36.53, y, -8.0, shell, true);
+    cylX(0.19, 0.16, matLedG, 36.44, y + 1.37, -7.5, shell, true);
   });
 
-  // 状态 LED 一行 6 点(绿×4 红 绿)
-  [matLedG, matLedG, matLedG, matLedG, matLedR, matLedG].forEach((m, i) =>
-    cylX(0.3, 0.22, m, 36.56, 60.8, 6.6 - i * 2.18, shell, true));
+  // 底排 6 只小按钮(LCD 下方一排,各带上方 LED):绿×4 红×1 绿×1
+  [6.21, 4.39, 2.58, 0.76, -1.05, -2.87].forEach((z, i) => {
+    cylX(0.62, 0.22, (i === 4) ? matPos : matToggle, 36.45, 64.1, z, shell, true);
+    cylX(0.46, 0.25, matButton, 36.465, 64.1, z, shell, true);
+    cylX(0.17, 0.16, (i === 4) ? matLedR : matLedG, 36.44, 65.0, z, shell, true);
+  });
 
-  // 铭牌槽线(左 4 右 4)
-  [69.9, 66.9, 64.1, 61.3].forEach(y => {
-    box(0.16, 0.5, 2.9, matGrille, 36.5, y, 9.2, shell, true);
-    box(0.16, 0.5, 2.9, matGrille, 36.5, y, -8.8, shell, true);
+  // 两翼装饰杠(左右各 4 条圆头凸条,在外板翼面上)
+  [70.9, 68.6, 66.1, 63.6].forEach(y => {
+    [10.9, -10.9].forEach(z => {
+      const d = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.5, 4, 12), matTrim);
+      d.rotation.x = Math.PI / 2;
+      d.position.set(36.1, y, z);
+      d.userData.shell = true;
+      shell.add(d);
+    });
   });
 
   // 大面积冲孔进风网栅(26.9 × 29,圆孔阵)+ 防尘过滤网
