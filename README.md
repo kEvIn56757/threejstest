@@ -58,6 +58,39 @@ node build-single.js   # 生成 cam.html(内联全部脚本)
 node fix-collisions.js # 必须执行!消除 three 内部 7 处重名
 ```
 
+## 如何添加新模型(模型下拉列表)
+
+顶部工具栏有一个模型下拉列表。新增模型只需两步:
+
+1. 在 `app.js` 里写一个构建函数,返回 `THREE.Group`:
+
+```js
+function buildMyModel() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5 });
+  mat.name = 'my_material';            // 材质命名会带到导出文件里
+  group.add(new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), mat));
+  return group;
+}
+```
+
+2. 在 `MODELS` 注册表里登记一条:
+
+```js
+const MODELS = [
+  { id: 'hikvision-bullet', name: '海康威视枪机', build: buildCamera },
+  { id: 'my-model', name: '我的模型', build: buildMyModel },   // ← 新增
+];
+```
+
+下拉列表会自动出现新选项;切换时自动取景(按包围球调整视距),
+导出 FBX / GLB 导出的是当前选中的模型。
+
+技巧:
+- 不想导出的物体(背景、阴影地面)设 `mesh.userData.noExport = true`
+- 网格自动补名(`材质名_序号`),也可以自己给 `mesh.name` 起名
+- 材质设 `.name`,导出后 Blender / Unity 里按名字识别
+
 ## 常见问题
 
 - **FBX 进 Blender 丢材质?** 把同目录的 `logo.png`、`glass_streak.png` 一起拷贝

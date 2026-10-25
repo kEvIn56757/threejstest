@@ -127,15 +127,19 @@ function main() {
   scene.add(ground);
   ground.userData.noExport = true; // 不导出阴影地面
 
-  // ---------- the camera model ----------
-  const model = buildCamera();
-  const pivot = new THREE.Group();
-  pivot.add(model);
-  scene.add(pivot);
+  // ---------- 模型注册表:新增模型时在数组里登记一条即可 ----------
+  // { id: '唯一ID', name: '下拉列表显示名', build: 构建函数(返回 THREE.Group) }
+  const MODELS = [
+    { id: 'hikvision-bullet', name: '海康威视枪机', build: buildCamera },
+    // { id: 'xxx', name: 'xxx名称', build: buildXxx },
+  ];
 
-  // ---------- 导出 FBX / GLB(模型 + 材质 + 贴图,不含动画) ----------
-  {
-    // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
+  const pivot = new THREE.Group();
+  scene.add(pivot);
+  let currentModel = null;
+
+  // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
+  function nameModel() {
     let n = 0;
     pivot.traverse(o => {
       if (o.isMesh && !o.name) {
@@ -143,6 +147,40 @@ function main() {
         o.name = mn + '_' + String(++n).padStart(2, '0');
       }
     });
+  }
+
+  function setModel(id) {
+    const rec = MODELS.find(m => m.id === id) || MODELS[0];
+    if (currentModel) {
+      pivot.remove(currentModel);
+      currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
+    }
+    currentModel = rec.build();
+    pivot.add(currentModel);
+    nameModel();
+    // 自动取景:按包围球调整轨道半径,让不同大小的模型都合适
+    const box = new THREE.Box3().setFromObject(currentModel);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    sph.radius = THREE.MathUtils.clamp(sphere.radius * 2.6, 11, 42);
+    applyCamera();
+    return rec;
+  }
+
+  // ---------- 模型下拉列表 ----------
+  const sel = document.getElementById('model-select');
+  if (sel) {
+    for (const m of MODELS) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener('change', () => setModel(sel.value));
+  }
+  setModel(MODELS[0].id);
+
+  // ---------- 导出 FBX / GLB(模型 + 材质 + 贴图,不含动画) ----------
+  {
     const saveBlob = (data, name, type) => {
       const blob = data instanceof Blob ? data : new Blob([data], { type });
       const a = document.createElement('a');

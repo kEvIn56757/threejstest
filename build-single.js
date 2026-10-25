@@ -65,15 +65,17 @@ const html = `<!DOCTYPE html>
     position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; z-index: 10;
     font: 12px/1 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   }
-  #tools button {
-    padding: 9px 14px; border: 1px solid #c6ccd3; border-radius: 8px;
+  #tools button, #tools select {
+    padding: 9px 12px; border: 1px solid #c6ccd3; border-radius: 8px;
     background: rgba(255, 255, 255, .88); color: #4a5058; cursor: pointer;
   }
-  #tools button:hover { background: #fff; color: #22262b; border-color: #9aa2ab; }
+  #tools button:hover, #tools select:hover { background: #fff; color: #22262b; border-color: #9aa2ab; }
+  #tools select { max-width: 180px; }
 </style>
 </head>
 <body>
 <div id="tools">
+  <select id="model-select" title="选择模型"></select>
   <button id="btn-fbx" title="导出 model.fbx + 贴图 PNG,可导入 Blender / Unity">导出 FBX</button>
   <button id="btn-glb" title="导出 model.glb(贴图内嵌,单文件)">导出 GLB</button>
 </div>
