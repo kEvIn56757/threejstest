@@ -5,7 +5,7 @@ const core = fs.readFileSync('vendor/three.core.js', 'utf8');
 const mod = fs.readFileSync('vendor/three.module.js', 'utf8');
 const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
-const modelUps = fs.readFileSync('ronk-ups.js', 'utf8');
+const modelUps = fs.readFileSync('ronk-ups.js', 'utf8') + '\n' + fs.readFileSync('earth-tester.js', 'utf8') + '\n' + fs.readFileSync('multimeter.js', 'utf8');
 const modelClamp = fs.readFileSync('clamp-meter.js', 'utf8');
 const app = fs.readFileSync('app.js', 'utf8');
 
@@ -52,12 +52,12 @@ const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n$
 let html = fs.readFileSync('index.html', 'utf8');
 
 let removed = 0;
-html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter)\.js"><\/script>\r?\n?/g, () => {
+html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter|earth-tester|multimeter)\.js"><\/script>\r?\n?/g, () => {
   removed++;
   return '';
 });
-if (removed !== 4) {
-  console.error('index.html 里的外部脚本标签数量异常(期望 4 个,实际 ' + removed + ' 个)');
+if (removed !== 6) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 6 个,实际 ' + removed + ' 个)');
   process.exit(1);
 }
 
