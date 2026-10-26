@@ -47,7 +47,7 @@ function main() {
 
   let spin = true;
   window.__debug = {
-    setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; sph.radius = r; applyCamera(); },
+    setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; if (r) sph.radius = r; applyCamera(); },
     setSpin(on) { spin = on; },
     setRot(y) { pivot.rotation.y = y; },
     model: () => currentModel,
@@ -133,6 +133,7 @@ function main() {
   const MODELS = [
     { id: 'hikvision-bullet', name: '海康威视枪机', build: buildCamera },
     { id: 'ronk-ups', name: 'RONK 工业UPS机柜', build: buildRonkUPS },
+    { id: 'dt201d-clamp', name: 'DT201D 数字钳形表', build: buildClampMeter },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -167,7 +168,13 @@ function main() {
     currentModel.position.y -= (box.min.y + box.max.y) / 2;
     const box2 = new THREE.Box3().setFromObject(currentModel);
     const sphere = box2.getBoundingSphere(new THREE.Sphere());
-    sph.radius = THREE.MathUtils.clamp(sphere.radius * 1.9, 11, 300);
+    // 细高/细长的模型(如钳形表)按包围球取景会被裁切,这里按包围盒的实际宽高做画幅适配
+    const size = box2.getSize(new THREE.Vector3());
+    const halfFov = (camera.fov * Math.PI / 180) / 2;
+    const fitV = (size.y / 2) / Math.tan(halfFov);
+    const fitH = (size.x / 2) / (Math.tan(halfFov) * Math.max(camera.aspect, 0.2));
+    const fit = Math.max(sphere.radius * 1.9, Math.max(fitV, fitH) * 1.18);
+    sph.radius = THREE.MathUtils.clamp(fit, 11, 400);
     // 阴影相机随模型大小自适应(小模型保持原参数不变)
     const sr = Math.max(13, sphere.radius * 1.15);
     key.shadow.camera.left = -sr; key.shadow.camera.right = sr;
@@ -204,6 +211,8 @@ function main() {
     shellBtn.addEventListener('click', () => {
       shellOn = !shellOn;
       currentModel.traverse(o => { if (o.isMesh && o.userData.shell) o.visible = shellOn; });
+      // 模型可自定义透视行为(如钳形表用半透明外壳做 X 光效果)
+      if (typeof currentModel.userData.onShellToggle === 'function') currentModel.userData.onShellToggle(shellOn);
       shellBtn.textContent = shellOn ? '查看内部' : '显示外壳';
     });
   }
