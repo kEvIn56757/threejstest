@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node serve.js",
+    "dev": "node serve.js",
+    "build": "node build-single.js && node fix-collisions.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

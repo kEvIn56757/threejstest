@@ -3,6 +3,7 @@ const fs = require('fs');
 
 const core = fs.readFileSync('vendor/three.core.js', 'utf8');
 const mod = fs.readFileSync('vendor/three.module.js', 'utf8');
+const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
 const modelUps = fs.readFileSync('ronk-ups.js', 'utf8');
 const app = fs.readFileSync('app.js', 'utf8');
@@ -44,50 +45,28 @@ if (appBody.includes('await import')) {
 }
 
 const threeList = used.sort().join(', ');
-const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${exporter}\n${modelUps}\n${appBody}`;
+const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n${exporter}\n${modelUps}\n${appBody}`;
 
-const html = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hikvision Bullet Camera 3D</title>
-<style>
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e9edf1; }
-  canvas { display: block; }
-  #hint {
-    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
-    font: 13px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    color: #8a9199; pointer-events: none; user-select: none; white-space: nowrap;
-    animation: hintFade 7s ease forwards;
-  }
-  @keyframes hintFade { 0%, 65% { opacity: .8; } 100% { opacity: 0; } }
-  #tools {
-    position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; z-index: 10;
-    font: 12px/1 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  }
-  #tools button, #tools select {
-    padding: 9px 12px; border: 1px solid #c6ccd3; border-radius: 8px;
-    background: rgba(255, 255, 255, .88); color: #4a5058; cursor: pointer;
-  }
-  #tools button:hover, #tools select:hover { background: #fff; color: #22262b; border-color: #9aa2ab; }
-  #tools select { max-width: 180px; }
-</style>
-</head>
-<body>
-<div id="tools">
-  <select id="model-select" title="选择模型"></select>
-  <button id="btn-shell" title="隐藏/显示外壳,查看内部结构">查看内部</button>
-  <button id="btn-fbx" title="导出 model.fbx + 贴图 PNG,可导入 Blender / Unity">导出 FBX</button>
-  <button id="btn-glb" title="导出 model.glb(贴图内嵌,单文件)">导出 GLB</button>
-</div>
-<div id="hint">拖动旋转 · 滚轮缩放</div>
-<script type="module">
-${inline}
-</script>
-</body>
-</html>
-`;
+// 以 index.html 为唯一模板:把外部 <script src> 换成内联包,避免两处 HTML 各自维护导致走样
+let html = fs.readFileSync('index.html', 'utf8');
+
+let removed = 0;
+html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups)\.js"><\/script>\r?\n?/g, () => {
+  removed++;
+  return '';
+});
+if (removed !== 3) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 3 个,实际 ' + removed + ' 个)');
+  process.exit(1);
+}
+
+const moduleTag = /<script type="module" src="\.\/app\.js"><\/script>/;
+if (!moduleTag.test(html)) {
+  console.error('index.html 里找不到 app.js 模块标签');
+  process.exit(1);
+}
+// 用函数式替换,避免 inline 内容里的 $& / $1 被当作替换模式解析
+html = html.replace(moduleTag, () => '<script type="module">\n' + inline + '\n</script>');
 
 fs.writeFileSync('cam.html', html);
 console.log('cam.html written:', (html.length / 1024 / 1024).toFixed(2), 'MB,', used.length, 'THREE names');
