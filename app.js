@@ -133,6 +133,8 @@ function main() {
   const MODELS = [
     { id: 'hikvision-bullet', name: '海康威视枪机', build: buildCamera },
     { id: 'ronk-ups', name: 'RONK 工业UPS机柜', build: buildRonkUPS },
+    { id: 'earth-tester', name: '防雷接地检测仪', build: buildEarthTester },
+    { id: 'multimeter', name: '数字万用表', build: buildMultimeter },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
