@@ -16,22 +16,41 @@
 
 ```bash
 npm install          # 安装 three(开发依赖)
-npx serve .          # 或 python3 -m http.server 8080
-# 打开 http://localhost:8080  (开发版:模块化,便于学习)
+npm start            # 零依赖静态服务器,默认端口 8889
+# 打开 http://localhost:8889  (开发版:模块化,便于学习)
+# 换端口:PORT=8890 npm start
+# 也可用 python -m http.server 8889 / npx serve -l 8889
 # 直接双击 cam.html 也可以(单文件版,无任何依赖)
 ```
+
+> 默认端口选 8889 是为了避开常见的 8080(很多 MCP 服务占用)。
 
 网页右上角两个按钮:
 
 | 按钮 | 产物 | 用途 |
 |---|---|---|
-| 导出 FBX | `model.fbx` + 贴图 PNG | Blender / Unity(贴图 PNG 与 fbx 放同一目录) |
-| 导出 GLB | `model.glb`(贴图内嵌单文件) | Blender / Unity / 任何 glTF 工具 |
+| 导出压缩包 | 一个 zip:`<模型id>.fbx` + 全部贴图 PNG + `<模型id>.glb` + `导入说明.txt` | Blender / Unity,整包解压即可 |
+| 导出 GLB | `<模型id>.glb`(贴图内嵌单文件) | 单文件分发 / 任何 glTF 工具 |
+
+> 早期版本点「导出 FBX」会连续触发 1 个模型 + N 张贴图的多个下载,浏览器还会弹「允许多文件下载」,
+> 现改为在浏览器内就地打成 **一个 zip**(零依赖实现,见 `zip.js`),一次下载完成。
 
 **Blender**:文件 → 导入 → FBX / glTF 2.0
-**Unity**:直接拖入工程(FBX),或安装 glTFast 包后直接用 .glb
+**Unity**:解压后整个文件夹拖入 `Assets/`,或安装 glTFast 包后直接用 .glb
 
 > 模型单位为米(整机约 0.2 m)。FBX 的 `UnitScaleFactor=100` 表示 1 单位 = 1 米。
+
+### FBX 结构校验
+
+导出器必须写出符合 FBX SDK 预期的完整结构,否则 Unity 会直接报
+`File is corrupted`(Blender 容忍度高,看不出问题)。两处易错点已处理:
+
+1. **文件尾(trailer)**:`FOOTER_ID` + 1~16 字节对齐填充 + `0u32` + 版本 + 120 字节保留区 + 16 字节魔法字,
+   且文件总长必须是 16 的整数倍 —— 读取器从末尾回溯定位。
+2. **布尔属性类型码是 `C`(单字节,取 `T`/`F`)**,不是 `B`。写错会让 SDK 解析失步。
+
+改动后可运行 `python tools/fbx-strict.py <file.fbx>` 做属性级校验(逐属性核对长度与节点偏移),
+不要只看节点数量。已验证:Unity 2022.3 导入成功(枪机 24 网格 / 10452 顶点,机柜 474 网格 / 33541 顶点)。
 
 ## 文件结构
 
@@ -40,8 +59,10 @@ npx serve .          # 或 python3 -m http.server 8080
 | `index.html` | 开发版页面(加载模块化脚本 + 导出按钮) |
 | `app.js` | **主体**:场景、灯光、相机交互、程序化建模(放样 loft + 圆角截面) |
 | `fbx-exporter.js` | 导出模块:二进制 FBX 7.4 + GLB 写出器(零依赖,不依赖 three) |
+| `zip.js` | 浏览器端零依赖 ZIP 打包器(CRC32 + deflate,不支持时自动退化为 store) |
+| `serve.js` | 零依赖静态开发服务器,默认端口 8889(`npm start`) |
 | `cam.html` | 构建产物:单文件版(内联 three.js 与全部脚本,双击即用) |
-| `build-single.js` | 把所有脚本内联进 cam.html 的构建脚本(`node build-single.js`) |
+| `build-single.js` | 以 index.html 为模板,把所有脚本内联进 cam.html(`node build-single.js`) |
 | `fix-collisions.js` | 构建后处理:消除 three 内部重名(`node fix-collisions.js`) |
 | `vendor/` | three.js 模块副本(three.module.js + three.core.js) |
 | `shot.js` | 自动截图验证脚本(Playwright,多角度渲染存图) |
@@ -61,6 +82,7 @@ npx serve .          # 或 python3 -m http.server 8080
 ## 构建流程
 
 ```bash
+npm run build          # 等价于下面两步,顺序不可颠倒
 node build-single.js   # 生成 cam.html(内联全部脚本)
 node fix-collisions.js # 必须执行!消除 three 内部 7 处重名
 ```

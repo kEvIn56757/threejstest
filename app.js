@@ -139,6 +139,7 @@ function main() {
   const pivot = new THREE.Group();
   scene.add(pivot);
   let currentModel = null;
+  let currentId = MODELS[0].id;
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
   function nameModel() {
@@ -153,6 +154,7 @@ function main() {
 
   function setModel(id) {
     const rec = MODELS.find(m => m.id === id) || MODELS[0];
+    currentId = rec.id;
     if (currentModel) {
       pivot.remove(currentModel);
       currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
@@ -207,7 +209,7 @@ function main() {
   }
   setModel(MODELS[0].id);
 
-  // ---------- 导出 FBX / GLB(模型 + 材质 + 贴图,不含动画) ----------
+  // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
   {
     const saveBlob = (data, name, type) => {
       const blob = data instanceof Blob ? data : new Blob([data], { type });
@@ -216,22 +218,93 @@ function main() {
       a.download = name;
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
     };
-    const doFBX = () => {
-      const { bytes, images } = exportFBX(scene);
-      saveBlob(bytes, 'model.fbx', 'application/octet-stream');
-      // 贴图 PNG 作为同名附件一起下载(与 model.fbx 放同一目录)
-      images.forEach((im, i) => setTimeout(() => saveBlob(im.bytes, im.name, 'image/png'), 350 * (i + 1)));
-    };
-    const doGLB = () => saveBlob(exportGLB(scene), 'model.glb', 'model/gltf-binary');
-    const b1 = document.getElementById('btn-fbx'), b2 = document.getElementById('btn-glb');
-    if (b1) b1.addEventListener('click', doFBX);
-    if (b2) b2.addEventListener('click', doGLB);
-    // 供自动化测试取回导出数据
+
+    // 导出说明(随压缩包一起给到,Unity / Blender 导入时照做即可)
+    function readmeText(id, modelName, texNames, hasGlb) {
+      return [
+        `${modelName} — ${id}`,
+        '='.repeat(40),
+        '',
+        '压缩包内容:',
+        `  ${id}.fbx          FBX 7.4 二进制模型(单位:米,UnitScaleFactor=100)`,
+        ...texNames.map(n => `  ${n}${' '.repeat(Math.max(1, 22 - n.length))}贴图,FBX 按文件名引用,必须与 fbx 同目录`),
+        hasGlb ? `  ${id}.glb          同一模型的 glTF 二进制版(贴图已内嵌,单文件)` : null,
+        '',
+        '—— Unity 导入(FBX,推荐) ——',
+        '1. 把整个文件夹拖入 Project 窗口,或先解压到 Assets/ 下的子目录;',
+        '2. 贴图 PNG 必须与 fbx 放在同一目录,Unity 会按材质名自动匹配;',
+        '3. 选中 fbx → Inspector → Model:',
+        '   · Scale Factor 保持 1(模型按米建模);若尺寸偏大/偏小,改 Scale Factor 或按 0.01 缩放;',
+        '   · 勾选 Read/Write 仅在需要运行时改网格时才开;',
+        '   · Materials → Material Creation Mode 设为 Standard,点 Extract Materials 可离线编辑材质;',
+        '4. 若贴图未自动挂上,在材质球里手动指定同名 PNG 即可。',
+        '',
+        '—— Unity 导入(GLB 备选) ——',
+        '1. Package Manager 安装 glTFast 或 UnityGLTF;',
+        '2. 直接把 .glb 拖入 Project,贴图已内嵌,无需额外文件。',
+        '',
+        '—— Blender ——',
+        '文件 → 导入 → FBX(.fbx)或 glTF 2.0(.glb);FBX 需贴图 PNG 同目录。',
+        '',
+        '注:导出的是当前下拉列表中选中的模型;隐藏外壳(「查看内部」)不影响导出,',
+        '    外壳几何照常包含在文件中,只是可见性为隐藏。',
+      ].filter(v => v !== null).join('\n') + '\n';
+    }
+
+    // 导出用:临时清零转台旋转,让顶点落在模型自身坐标系(否则烘焙进的是
+    // 点击导出那一刻的转台角度,每次导出朝向都不一样)。导完立刻恢复。
+    function withModelSpace(fn) {
+      const saved = pivot.rotation.clone();
+      pivot.rotation.set(0, 0, 0);
+      pivot.updateMatrixWorld(true);
+      try { return fn(); }
+      finally { pivot.rotation.copy(saved); pivot.updateMatrixWorld(true); }
+    }
+
+    async function exportZip(id, modelName) {
+      const { bytes, images } = withModelSpace(() => exportFBX(scene));
+      const texNames = images.map(im => im.name);
+      const files = [
+        { name: id + '.fbx', data: bytes },
+        ...images.map(im => ({ name: im.name, data: im.bytes })),
+        { name: id + '.glb', data: withModelSpace(() => exportGLB(scene)) },
+      ];
+      const readme = readmeText(id, modelName, texNames, true);
+      files.push({ name: '导入说明.txt', data: new TextEncoder().encode(readme) });
+      return ZipPack.makeZip(files, { compress: true });
+    }
+
+    const btnFbx = document.getElementById('btn-fbx');
+    const btnGlb = document.getElementById('btn-glb');
+
+    if (btnFbx) btnFbx.addEventListener('click', async () => {
+      const rec = MODELS.find(m => m.id === currentId) || MODELS[0];
+      const label = btnFbx.textContent;
+      btnFbx.disabled = true;
+      btnFbx.textContent = '打包中…';
+      try {
+        const zip = await exportZip(rec.id, rec.name);
+        saveBlob(zip, rec.id + '.zip', 'application/zip');
+        btnFbx.textContent = '已导出 ✓';
+        setTimeout(() => { btnFbx.textContent = label; btnFbx.disabled = false; }, 1600);
+      } catch (e) {
+        console.error(e);
+        btnFbx.textContent = '导出失败';
+        setTimeout(() => { btnFbx.textContent = label; btnFbx.disabled = false; }, 2000);
+      }
+    });
+
+    if (btnGlb) btnGlb.addEventListener('click', () => {
+      const rec = MODELS.find(m => m.id === currentId) || MODELS[0];
+      saveBlob(withModelSpace(() => exportGLB(scene)), rec.id + '.glb', 'model/gltf-binary');
+    });
+
+    // 供自动化测试直接取回导出数据(不触发下载)
     window.__export = {
       fbx() {
-        const { bytes, images } = exportFBX(scene);
+        const { bytes, images } = withModelSpace(() => exportFBX(scene));
         const toB64 = (arr) => {
           let bin = '';
           for (let i = 0; i < arr.length; i += 8192) bin += String.fromCharCode.apply(null, arr.subarray(i, i + 8192));
@@ -243,10 +316,17 @@ function main() {
         };
       },
       glb() {
-        const bytes = exportGLB(scene);
+        const bytes = withModelSpace(() => exportGLB(scene));
         let bin = '';
         for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
         return btoa(bin);
+      },
+      async zip() {
+        const rec = MODELS.find(m => m.id === currentId) || MODELS[0];
+        const bytes = await exportZip(rec.id, rec.name);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+        return { name: rec.id + '.zip', base64: btoa(bin) };
       }
     };
   }

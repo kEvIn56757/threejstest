@@ -30,8 +30,8 @@
 <div id="tools">
   <select id="model-select" title="选择模型"></select>
   <button id="btn-shell" title="隐藏/显示外壳,查看内部结构">查看内部</button>
-  <button id="btn-fbx" title="导出 model.fbx + 贴图 PNG,可导入 Blender / Unity">导出 FBX</button>
-  <button id="btn-glb" title="导出 model.glb(贴图内嵌,单文件)">导出 GLB</button>
+  <button id="btn-fbx" title="导出 zip 压缩包:模型 fbx + glb + 全部贴图 + 导入说明,可整包导入 Unity / Blender">导出压缩包</button>
+  <button id="btn-glb" title="只导出 glb 单文件(贴图内嵌)">导出 GLB</button>
 </div>
 <div id="hint">拖动旋转 · 滚轮缩放</div>
 <script type="module">
@@ -80343,6 +80343,144 @@ class WebGLRenderer {
 
 
 const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferGeometry, CanvasTexture, CapsuleGeometry, CircleGeometry, CylinderGeometry, DirectionalLight, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, PerspectiveCamera, PlaneGeometry, SRGBColorSpace, Scene, ShadowMaterial, Shape, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, Vector3, WebGLRenderer };
+// zip.js — 零依赖 ZIP 打包器(浏览器端),用于把「模型 + 多张贴图」合成一个压缩包
+// 暴露 window.ZipPack.makeZip(files, {compress}) -> Promise<Uint8Array>
+//   files: [{ name: 'model.fbx', data: Uint8Array }, ...]
+//   浏览器支持 CompressionStream 时用 deflate(方法 8),否则退化为 store(方法 0)
+(function (global) {
+  'use strict';
+
+  // ---------- CRC32 ----------
+  const CRC_TABLE = (function () {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // ---------- DOS 时间 ----------
+  function dosDateTime(d) {
+    const time = ((d.getHours() & 0x1F) << 11) | ((d.getMinutes() & 0x3F) << 5) | ((d.getSeconds() >> 1) & 0x1F);
+    const date = (((d.getFullYear() - 1980) & 0x7F) << 9) | (((d.getMonth() + 1) & 0x0F) << 5) | (d.getDate() & 0x1F);
+    return { time, date };
+  }
+
+  // ---------- deflate-raw(不支持则返回 null) ----------
+  async function deflateRaw(bytes) {
+    if (typeof global.CompressionStream === 'undefined' || typeof global.Blob === 'undefined') return null;
+    try {
+      const stream = new Blob([bytes]).stream().pipeThrough(new global.CompressionStream('deflate-raw'));
+      const buf = await new Response(stream).arrayBuffer();
+      return new Uint8Array(buf);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const UTF8_FLAG = 0x0800; // 文件名按 UTF-8 编码
+  const SIG_LOCAL = 0x04034b50;
+  const SIG_CENTRAL = 0x02014b50;
+  const SIG_EOCD = 0x06054b50;
+
+  async function makeZip(files, opts) {
+    const compress = !opts || opts.compress !== false;
+    const enc = new TextEncoder();
+    const now = new Date();
+    const { time, date } = dosDateTime(now);
+
+    const parts = [];       // 所有待拼接的字节块(本地头 + 数据)
+    const central = [];     // 中央目录记录
+    let offset = 0;
+
+    for (const f of files) {
+      const nameBytes = enc.encode(f.name);
+      const raw = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data);
+      const crc = crc32(raw);
+
+      let method = 0;
+      let payload = raw;
+      if (compress && raw.length > 256) {
+        const packed = await deflateRaw(raw);
+        if (packed && packed.length < raw.length) { method = 8; payload = packed; }
+      }
+
+      // 本地文件头 30 字节 + 文件名
+      const lh = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(lh.buffer);
+      lv.setUint32(0, SIG_LOCAL, true);
+      lv.setUint16(4, 20, true);          // 解压所需版本
+      lv.setUint16(6, UTF8_FLAG, true);
+      lv.setUint16(8, method, true);
+      lv.setUint16(10, time, true);
+      lv.setUint16(12, date, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, payload.length, true);
+      lv.setUint32(22, raw.length, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);          // extra 长度
+      lh.set(nameBytes, 30);
+
+      parts.push(lh, payload);
+
+      // 中央目录记录 46 字节 + 文件名
+      const cd = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(cd.buffer);
+      cv.setUint32(0, SIG_CENTRAL, true);
+      cv.setUint16(4, 20, true);          // 创建版本
+      cv.setUint16(6, 20, true);          // 解压所需版本
+      cv.setUint16(8, UTF8_FLAG, true);
+      cv.setUint16(10, method, true);
+      cv.setUint16(12, time, true);
+      cv.setUint16(14, date, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, payload.length, true);
+      cv.setUint32(24, raw.length, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);          // extra
+      cv.setUint16(32, 0, true);          // comment
+      cv.setUint16(34, 0, true);          // 起始磁盘号
+      cv.setUint16(36, 0, true);          // 内部属性
+      cv.setUint32(38, 0, true);          // 外部属性
+      cv.setUint32(42, offset, true);     // 本地头偏移
+      cd.set(nameBytes, 46);
+      central.push(cd);
+
+      offset += lh.length + payload.length;
+    }
+
+    const cdSize = central.reduce((s, c) => s + c.length, 0);
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, SIG_EOCD, true);
+    ev.setUint16(4, 0, true);                    // 当前磁盘号
+    ev.setUint16(6, 0, true);                    // 中央目录起始磁盘号
+    ev.setUint16(8, files.length, true);         // 本盘条目数
+    ev.setUint16(10, files.length, true);        // 总条目数
+    ev.setUint32(12, cdSize, true);
+    ev.setUint32(16, offset, true);              // 中央目录偏移
+    ev.setUint16(20, 0, true);                   // 注释长度
+
+    const total = offset + cdSize + eocd.length;
+    const out = new Uint8Array(total);
+    let p = 0;
+    for (const chunk of parts) { out.set(chunk, p); p += chunk.length; }
+    for (const chunk of central) { out.set(chunk, p); p += chunk.length; }
+    out.set(eocd, p);
+    return out;
+  }
+
+  global.ZipPack = { makeZip, crc32 };
+})(typeof window !== 'undefined' ? window : globalThis);
+
 // fbx-exporter.js — 独立导出模块(无 three.js 依赖,只读取对象属性)
 //
 //   exportFBX(scene, opts) -> { bytes, images:[{name, bytes}] }   二进制 FBX 7.4 + 贴图 PNG
@@ -80353,6 +80491,23 @@ const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferGeomet
 // Blender 4.x 只认二进制 FBX(ASCII 会被拒绝),Unity 两者都认。
 
 const EXPORT_SCALE_DEFAULT = 0.01; // cm -> m
+
+// FBX 二进制文件尾常量(布局见 encode_bin / ufbx 规范,FBX SDK 与 Unity 严格校验)
+//   ① FOOTER_ID   16 字节固定标识
+//   ② padding     1..16 字节零,使「文件体 + 16」对齐到 16 字节边界
+//   ③ 0u32        4 字节零
+//   ④ VERSION     4 字节(7400)
+//   ⑤ reserved    120 字节零
+//   ⑥ FOOTER_MAGIC 16 字节固定魔法字(必须是文件最后 16 字节)
+// 读取器依赖「文件总长 = 16 的整数倍」从末尾回溯定位 trailer,缺这部分会判定文件损坏。
+const FBX_FOOTER_ID = new Uint8Array([
+  0xfa, 0xbc, 0xab, 0x09, 0xd0, 0xc8, 0xd4, 0x66,
+  0xb1, 0x76, 0xfb, 0x83, 0x1c, 0xf7, 0x26, 0x7e,
+]);
+const FBX_FOOTER_MAGIC = new Uint8Array([
+  0xf8, 0x5a, 0x8c, 0x6a, 0xde, 0xf5, 0xd9, 0x7e,
+  0xec, 0xe9, 0x0c, 0xe3, 0x75, 0x8f, 0x29, 0x0b,
+]);
 
 // ---------- 通用:收集可导出网格 ----------
 function collectMeshes(scene) {
@@ -80373,38 +80528,50 @@ function extractTriangles(mesh, scale) {
   const index = g.index ? g.index.array : null;
   const cornerCount = index ? index.length : posAttr.count;
 
+  // three.js Matrix4.elements 是列主序: e[0..3]=第0列, e[12..14]=平移分量。
+  // 点变换: out_i = e[i]*x + e[4+i]*y + e[8+i]*z + e[12+i]
+  // (旧实现把 m[12] 当平移用,但 m[12] 实际取到 e[3]——恒为 0,导致所有
+  //  用 position 定位的部件顶点全部堆在原点;旋转同时被转置)
   const e = mesh.matrixWorld.elements;
-  const m = [
-    e[0], e[4], e[8], e[12],
-    e[1], e[5], e[9], e[13],
-    e[2], e[6], e[10], e[14],
-    e[3], e[7], e[11], e[15],
-  ];
-  // 法线矩阵:模型矩阵 3x3 的逆转置
-  const a = e[0], b = e[1], c = e[2], d = e[4], f = e[5], gg = e[6], h = e[8], i2 = e[9], j = e[10];
-  const A = f * j - gg * i2, B = gg * h - d * j, C = d * i2 - f * h;
-  const det = a * A + b * B + c * C || 1;
+  const e0 = e[0], e1 = e[4], e2 = e[8], tx = e[12];
+  const e3 = e[1], e4 = e[5], e5 = e[9], ty = e[13];
+  const e6 = e[2], e7 = e[6], e8 = e[10], tz = e[14];
+
+  // 法线矩阵 = (M3)^-1 的转置。M3 为左上 3x3,行主序按行取:
+  //   row0 = (e0,e4,e8) row1 = (e1,e5,e9) row2 = (e2,e6,e10)
+  const a = e[0], b = e[4], c = e[8];
+  const d = e[1], f2 = e[5], gg = e[9];
+  const h = e[2], i2 = e[6], j = e[10];
+  // 注意:变量名是 gg(e[9]),不能写成 g —— g 在作用域内是 mesh.geometry,
+  // 参与算术会得到 NaN,导致全部法线变成 NaN,模型在 Unity 里渲染为纯黑。
+  const A = f2 * j - gg * i2, B = -(d * j - gg * h), C = d * i2 - f2 * h;
+  const D = -(b * j - c * i2), F = a * j - c * h, G = -(a * i2 - b * h);
+  const H = b * gg - c * f2, I = -(a * gg - c * d), J = a * f2 - b * d;
+  let det = a * A + b * B + c * C;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) det = 1;  // 退化矩阵:退回单位阵
+  // Minv = adj(M3)/det (行主序);法线 = Minv 的转置作用于 n
   const inv = [
-    A / det, B / det, C / det,
-    (c * i2 - b * j) / det, (a * j - c * h) / det, (b * h - a * i2) / det,
-    (b * gg - c * f) / det, (c * d - a * gg) / det, (a * f - b * d) / det,
+    A / det, D / det, H / det,     // Minv 第 0 列 → 法线 x 分量的系数
+    B / det, F / det, I / det,     // 第 1 列 → y
+    C / det, G / det, J / det,     // 第 2 列 → z
   ];
 
   const pos = [], nor = [], uv = [];
   for (let t = 0; t < cornerCount; t++) {
     const vi = index ? index[t] : t;
     const x = posAttr.getX(vi), y = posAttr.getY(vi), z = posAttr.getZ(vi);
-    pos.push((m[0] * x + m[4] * y + m[8] * z + m[12]) * scale,
-             (m[1] * x + m[5] * y + m[9] * z + m[13]) * scale,
-             (m[2] * x + m[6] * y + m[10] * z + m[14]) * scale);
+    pos.push((e0 * x + e1 * y + e2 * z + tx) * scale,
+             (e3 * x + e4 * y + e5 * z + ty) * scale,
+             (e6 * x + e7 * y + e8 * z + tz) * scale);
     let nx = 0, ny = 1, nz = 0;
     if (norAttr) {
       const px = norAttr.getX(vi), py = norAttr.getY(vi), pz = norAttr.getZ(vi);
       nx = inv[0] * px + inv[3] * py + inv[6] * pz;
       ny = inv[1] * px + inv[4] * py + inv[7] * pz;
       nz = inv[2] * px + inv[5] * py + inv[8] * pz;
-      const l = Math.hypot(nx, ny, nz) || 1;
-      nx /= l; ny /= l; nz /= l;
+      const l = Math.hypot(nx, ny, nz);
+      if (Number.isFinite(l) && l > 1e-9) { nx /= l; ny /= l; nz /= l; }
+      else { nx = 0; ny = 1; nz = 0; }   // 兜底:退化法线给 -/+Y,避免写出 NaN
     }
     nor.push(nx, ny, nz);
     if (uvAttr) uv.push(uvAttr.getX(vi), uvAttr.getY(vi));
@@ -80436,7 +80603,10 @@ function canvasPngBytes(image) {
 // ============================================================
 const T = {
   I: v => ({ t: 'I', v }), D: v => ({ t: 'D', v }), L: v => ({ t: 'L', v }),
-  S: v => ({ t: 'S', v }), R: v => ({ t: 'R', v }), B: v => ({ t: 'B', v }),
+  S: v => ({ t: 'S', v }), R: v => ({ t: 'R', v }),
+  // FBX 布尔属性的类型码是 'C'(单字节),不是 'B'。写成 'B' 会让 FBX SDK 解析失步,
+  // 报 "File is corrupted"。取值按 SDK 惯例写 'T'(0x54) / 'F'(0x46)。
+  B: v => ({ t: 'C', v: !!v }),
   d: v => ({ t: 'd', v }), i: v => ({ t: 'i', v }),
 };
 const N = (id, props = [], kids = []) => ({ id, props, kids });
@@ -80643,14 +80813,32 @@ function buildFBXTree(scene, opts = {}) {
   const connNodes = connections.map(([ctype, from, to, prop]) =>
     N('C', [T.S(ctype), T.L(from), T.L(to), ...(prop ? [T.S(prop)] : [])]));
 
+  // Documents / References / Takes:FBX SDK 期望这些顶层节点存在,缺了 Unity 会视为不完整文件
+  const documents = N('Documents', [], [
+    N('Count', [T.I(1)]),
+    N('Document', [T.L(1000), T.S(''), T.S('Scene')], [
+      N('Properties70', [], [
+        N('P', [T.S('SourceObject'), T.S('object'), T.S(''), T.S('')]),
+        N('P', [T.S('ActiveAnimStackName'), T.S('KString'), T.S(''), T.S('')]),
+      ]),
+      N('RootNode', [T.L(0)]),
+    ]),
+  ]);
+  const references = N('References', [], []);
+  const takes = N('Takes', [], [N('Current', [T.S('')])]);
+
   const root = N('', [], [
     header,
     N('FileId', [T.R(new Uint8Array([0x28, 0xb3, 0x2a, 0xeb, 0xb6, 0x24, 0xcc, 0xc2, 0xbf, 0xc8, 0xb0, 0x2a, 0xa9, 0x2b, 0xfc, 0xf1]))]),
     N('CreationTime', [T.S('1970-01-01 10:00:00:000')]),
+    N('Creator', [T.S('threejstest fbx-exporter.js')]),
     globalSettings,
+    documents,
+    references,
     definitions,
     N('Objects', [], objects),
     N('Connections', [], connNodes),
+    takes,
   ]);
   root.__textures = textures;
   return root;
@@ -80685,12 +80873,13 @@ function serializeFBXBinary(root) {
 
   function propDataLength(p) {
     switch (p.t) {
-      case 'B': return 1;
+      case 'C': return 1;
       case 'I': return 4;
       case 'F': return 4;
       case 'D': return 8;
       case 'L': return 8;
-      case 'S': case 'R': return 4 + p.v.length + (p.v instanceof Uint8Array ? 0 : 0);
+      case 'S': return 4 + enc.encode(p.v).length;   // 长度必须是 UTF-8 字节数(不能用 .length)
+      case 'R': return 4 + p.v.length;
       case 'd': return 12 + p.v.length * 8;
       case 'i': return 12 + p.v.length * 4;
     }
@@ -80718,7 +80907,7 @@ function serializeFBXBinary(root) {
     push(new Uint8Array([p.t.charCodeAt(0)]));
     const dv = n => new DataView(new ArrayBuffer(n));
     switch (p.t) {
-      case 'B': { const b = new Uint8Array([p.v ? 1 : 0]); push(b); break; }
+      case 'C': { const b = new Uint8Array([p.v ? 0x54 : 0x46]); push(b); break; }   // 'T' / 'F'
       case 'I': { const d = dv(4); d.setInt32(0, p.v, true); push(new Uint8Array(d.buffer)); break; }
       case 'L': { const d = dv(8); d.setBigInt64(0, BigInt(p.v), true); push(new Uint8Array(d.buffer)); break; }
       case 'D': { const d = dv(8); d.setFloat64(0, p.v, true); push(new Uint8Array(d.buffer)); break; }
@@ -80742,7 +80931,6 @@ function serializeFBXBinary(root) {
     }
   }
 
-  calc.length = 0;
   // FBX 顶层是平铺元素序列(无包裹根),结尾一个 13 字节哨兵
   let topOff = 27;                          // 文件头 23 + 版本 4
   for (let i = 0; i < root.kids.length; i++) topOff = calc(root.kids[i], topOff, i === root.kids.length - 1);
@@ -80752,7 +80940,19 @@ function serializeFBXBinary(root) {
   vd.setUint32(0, 7400, true);
   push(new Uint8Array(vd.buffer));
   for (let i = 0; i < root.kids.length; i++) writeNode(root.kids[i], i === root.kids.length - 1);
-  push(new Uint8Array(13));
+  push(new Uint8Array(13));                 // 根节点列表结束哨兵
+
+  // ---- 文件尾(顺序与对齐都不可省,否则 FBX SDK 判定 "File is corrupted")----
+  const bodyLen = length;                   // 含上面 13 字节哨兵
+  const pad = 16 - ((bodyLen + 16) % 16);   // 1..16,保证总长是 16 的整数倍
+  push(FBX_FOOTER_ID);                      // ① 16 字节固定 ID
+  push(new Uint8Array(pad));                // ② 对齐填充
+  push(new Uint8Array(4));                  // ③ 0u32
+  const fv = new DataView(new ArrayBuffer(4));
+  fv.setUint32(0, 7400, true);
+  push(new Uint8Array(fv.buffer));          // ④ 版本重复
+  push(new Uint8Array(120));                // ⑤ 保留区
+  push(FBX_FOOTER_MAGIC);                   // ⑥ 结尾魔法字(文件最后 16 字节)
 
   const out = new Uint8Array(length);
   let off = 0;
@@ -81620,6 +81820,7 @@ function main() {
   const pivot = new THREE.Group();
   scene.add(pivot);
   let currentModel = null;
+  let currentId = MODELS[0].id;
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
   function nameModel() {
@@ -81634,6 +81835,7 @@ function main() {
 
   function setModel(id) {
     const rec = MODELS.find(m => m.id === id) || MODELS[0];
+    currentId = rec.id;
     if (currentModel) {
       pivot.remove(currentModel);
       currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
@@ -81688,7 +81890,7 @@ function main() {
   }
   setModel(MODELS[0].id);
 
-  // ---------- 导出 FBX / GLB(模型 + 材质 + 贴图,不含动画) ----------
+  // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
   {
     const saveBlob = (data, name, type) => {
       const blob = data instanceof Blob ? data : new Blob([data], { type });
@@ -81697,22 +81899,93 @@ function main() {
       a.download = name;
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
     };
-    const doFBX = () => {
-      const { bytes, images } = exportFBX(scene);
-      saveBlob(bytes, 'model.fbx', 'application/octet-stream');
-      // 贴图 PNG 作为同名附件一起下载(与 model.fbx 放同一目录)
-      images.forEach((im, i) => setTimeout(() => saveBlob(im.bytes, im.name, 'image/png'), 350 * (i + 1)));
-    };
-    const doGLB = () => saveBlob(exportGLB(scene), 'model.glb', 'model/gltf-binary');
-    const b1 = document.getElementById('btn-fbx'), b2 = document.getElementById('btn-glb');
-    if (b1) b1.addEventListener('click', doFBX);
-    if (b2) b2.addEventListener('click', doGLB);
-    // 供自动化测试取回导出数据
+
+    // 导出说明(随压缩包一起给到,Unity / Blender 导入时照做即可)
+    function readmeText(id, modelName, texNames, hasGlb) {
+      return [
+        `${modelName} — ${id}`,
+        '='.repeat(40),
+        '',
+        '压缩包内容:',
+        `  ${id}.fbx          FBX 7.4 二进制模型(单位:米,UnitScaleFactor=100)`,
+        ...texNames.map(n => `  ${n}${' '.repeat(Math.max(1, 22 - n.length))}贴图,FBX 按文件名引用,必须与 fbx 同目录`),
+        hasGlb ? `  ${id}.glb          同一模型的 glTF 二进制版(贴图已内嵌,单文件)` : null,
+        '',
+        '—— Unity 导入(FBX,推荐) ——',
+        '1. 把整个文件夹拖入 Project 窗口,或先解压到 Assets/ 下的子目录;',
+        '2. 贴图 PNG 必须与 fbx 放在同一目录,Unity 会按材质名自动匹配;',
+        '3. 选中 fbx → Inspector → Model:',
+        '   · Scale Factor 保持 1(模型按米建模);若尺寸偏大/偏小,改 Scale Factor 或按 0.01 缩放;',
+        '   · 勾选 Read/Write 仅在需要运行时改网格时才开;',
+        '   · Materials → Material Creation Mode 设为 Standard,点 Extract Materials 可离线编辑材质;',
+        '4. 若贴图未自动挂上,在材质球里手动指定同名 PNG 即可。',
+        '',
+        '—— Unity 导入(GLB 备选) ——',
+        '1. Package Manager 安装 glTFast 或 UnityGLTF;',
+        '2. 直接把 .glb 拖入 Project,贴图已内嵌,无需额外文件。',
+        '',
+        '—— Blender ——',
+        '文件 → 导入 → FBX(.fbx)或 glTF 2.0(.glb);FBX 需贴图 PNG 同目录。',
+        '',
+        '注:导出的是当前下拉列表中选中的模型;隐藏外壳(「查看内部」)不影响导出,',
+        '    外壳几何照常包含在文件中,只是可见性为隐藏。',
+      ].filter(v => v !== null).join('\n') + '\n';
+    }
+
+    // 导出用:临时清零转台旋转,让顶点落在模型自身坐标系(否则烘焙进的是
+    // 点击导出那一刻的转台角度,每次导出朝向都不一样)。导完立刻恢复。
+    function withModelSpace(fn) {
+      const saved = pivot.rotation.clone();
+      pivot.rotation.set(0, 0, 0);
+      pivot.updateMatrixWorld(true);
+      try { return fn(); }
+      finally { pivot.rotation.copy(saved); pivot.updateMatrixWorld(true); }
+    }
+
+    async function exportZip(id, modelName) {
+      const { bytes, images } = withModelSpace(() => exportFBX(scene));
+      const texNames = images.map(im => im.name);
+      const files = [
+        { name: id + '.fbx', data: bytes },
+        ...images.map(im => ({ name: im.name, data: im.bytes })),
+        { name: id + '.glb', data: withModelSpace(() => exportGLB(scene)) },
+      ];
+      const readme = readmeText(id, modelName, texNames, true);
+      files.push({ name: '导入说明.txt', data: new TextEncoder().encode(readme) });
+      return ZipPack.makeZip(files, { compress: true });
+    }
+
+    const btnFbx = document.getElementById('btn-fbx');
+    const btnGlb = document.getElementById('btn-glb');
+
+    if (btnFbx) btnFbx.addEventListener('click', async () => {
+      const rec = MODELS.find(m => m.id === currentId) || MODELS[0];
+      const label = btnFbx.textContent;
+      btnFbx.disabled = true;
+      btnFbx.textContent = '打包中…';
+      try {
+        const zip = await exportZip(rec.id, rec.name);
+        saveBlob(zip, rec.id + '.zip', 'application/zip');
+        btnFbx.textContent = '已导出 ✓';
+        setTimeout(() => { btnFbx.textContent = label; btnFbx.disabled = false; }, 1600);
+      } catch (e) {
+        console.error(e);
+        btnFbx.textContent = '导出失败';
+        setTimeout(() => { btnFbx.textContent = label; btnFbx.disabled = false; }, 2000);
+      }
+    });
+
+    if (btnGlb) btnGlb.addEventListener('click', () => {
+      const rec = MODELS.find(m => m.id === currentId) || MODELS[0];
+      saveBlob(withModelSpace(() => exportGLB(scene)), rec.id + '.glb', 'model/gltf-binary');
+    });
+
+    // 供自动化测试直接取回导出数据(不触发下载)
     window.__export = {
       fbx() {
-        const { bytes, images } = exportFBX(scene);
+        const { bytes, images } = withModelSpace(() => exportFBX(scene));
         const toB64 = (arr) => {
           let bin = '';
           for (let i = 0; i < arr.length; i += 8192) bin += String.fromCharCode.apply(null, arr.subarray(i, i + 8192));
@@ -81724,10 +81997,17 @@ function main() {
         };
       },
       glb() {
-        const bytes = exportGLB(scene);
+        const bytes = withModelSpace(() => exportGLB(scene));
         let bin = '';
         for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
         return btoa(bin);
+      },
+      async zip() {
+        const rec = MODELS.find(m => m.id === currentId) || MODELS[0];
+        const bytes = await exportZip(rec.id, rec.name);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+        return { name: rec.id + '.zip', base64: btoa(bin) };
       }
     };
   }

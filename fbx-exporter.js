@@ -9,6 +9,23 @@
 
 const EXPORT_SCALE_DEFAULT = 0.01; // cm -> m
 
+// FBX 二进制文件尾常量(布局见 encode_bin / ufbx 规范,FBX SDK 与 Unity 严格校验)
+//   ① FOOTER_ID   16 字节固定标识
+//   ② padding     1..16 字节零,使「文件体 + 16」对齐到 16 字节边界
+//   ③ 0u32        4 字节零
+//   ④ VERSION     4 字节(7400)
+//   ⑤ reserved    120 字节零
+//   ⑥ FOOTER_MAGIC 16 字节固定魔法字(必须是文件最后 16 字节)
+// 读取器依赖「文件总长 = 16 的整数倍」从末尾回溯定位 trailer,缺这部分会判定文件损坏。
+const FBX_FOOTER_ID = new Uint8Array([
+  0xfa, 0xbc, 0xab, 0x09, 0xd0, 0xc8, 0xd4, 0x66,
+  0xb1, 0x76, 0xfb, 0x83, 0x1c, 0xf7, 0x26, 0x7e,
+]);
+const FBX_FOOTER_MAGIC = new Uint8Array([
+  0xf8, 0x5a, 0x8c, 0x6a, 0xde, 0xf5, 0xd9, 0x7e,
+  0xec, 0xe9, 0x0c, 0xe3, 0x75, 0x8f, 0x29, 0x0b,
+]);
+
 // ---------- 通用:收集可导出网格 ----------
 function collectMeshes(scene) {
   const list = [];
@@ -28,38 +45,50 @@ function extractTriangles(mesh, scale) {
   const index = g.index ? g.index.array : null;
   const cornerCount = index ? index.length : posAttr.count;
 
+  // three.js Matrix4.elements 是列主序: e[0..3]=第0列, e[12..14]=平移分量。
+  // 点变换: out_i = e[i]*x + e[4+i]*y + e[8+i]*z + e[12+i]
+  // (旧实现把 m[12] 当平移用,但 m[12] 实际取到 e[3]——恒为 0,导致所有
+  //  用 position 定位的部件顶点全部堆在原点;旋转同时被转置)
   const e = mesh.matrixWorld.elements;
-  const m = [
-    e[0], e[4], e[8], e[12],
-    e[1], e[5], e[9], e[13],
-    e[2], e[6], e[10], e[14],
-    e[3], e[7], e[11], e[15],
-  ];
-  // 法线矩阵:模型矩阵 3x3 的逆转置
-  const a = e[0], b = e[1], c = e[2], d = e[4], f = e[5], gg = e[6], h = e[8], i2 = e[9], j = e[10];
-  const A = f * j - gg * i2, B = gg * h - d * j, C = d * i2 - f * h;
-  const det = a * A + b * B + c * C || 1;
+  const e0 = e[0], e1 = e[4], e2 = e[8], tx = e[12];
+  const e3 = e[1], e4 = e[5], e5 = e[9], ty = e[13];
+  const e6 = e[2], e7 = e[6], e8 = e[10], tz = e[14];
+
+  // 法线矩阵 = (M3)^-1 的转置。M3 为左上 3x3,行主序按行取:
+  //   row0 = (e0,e4,e8) row1 = (e1,e5,e9) row2 = (e2,e6,e10)
+  const a = e[0], b = e[4], c = e[8];
+  const d = e[1], f2 = e[5], gg = e[9];
+  const h = e[2], i2 = e[6], j = e[10];
+  // 注意:变量名是 gg(e[9]),不能写成 g —— g 在作用域内是 mesh.geometry,
+  // 参与算术会得到 NaN,导致全部法线变成 NaN,模型在 Unity 里渲染为纯黑。
+  const A = f2 * j - gg * i2, B = -(d * j - gg * h), C = d * i2 - f2 * h;
+  const D = -(b * j - c * i2), F = a * j - c * h, G = -(a * i2 - b * h);
+  const H = b * gg - c * f2, I = -(a * gg - c * d), J = a * f2 - b * d;
+  let det = a * A + b * B + c * C;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) det = 1;  // 退化矩阵:退回单位阵
+  // Minv = adj(M3)/det (行主序);法线 = Minv 的转置作用于 n
   const inv = [
-    A / det, B / det, C / det,
-    (c * i2 - b * j) / det, (a * j - c * h) / det, (b * h - a * i2) / det,
-    (b * gg - c * f) / det, (c * d - a * gg) / det, (a * f - b * d) / det,
+    A / det, D / det, H / det,     // Minv 第 0 列 → 法线 x 分量的系数
+    B / det, F / det, I / det,     // 第 1 列 → y
+    C / det, G / det, J / det,     // 第 2 列 → z
   ];
 
   const pos = [], nor = [], uv = [];
   for (let t = 0; t < cornerCount; t++) {
     const vi = index ? index[t] : t;
     const x = posAttr.getX(vi), y = posAttr.getY(vi), z = posAttr.getZ(vi);
-    pos.push((m[0] * x + m[4] * y + m[8] * z + m[12]) * scale,
-             (m[1] * x + m[5] * y + m[9] * z + m[13]) * scale,
-             (m[2] * x + m[6] * y + m[10] * z + m[14]) * scale);
+    pos.push((e0 * x + e1 * y + e2 * z + tx) * scale,
+             (e3 * x + e4 * y + e5 * z + ty) * scale,
+             (e6 * x + e7 * y + e8 * z + tz) * scale);
     let nx = 0, ny = 1, nz = 0;
     if (norAttr) {
       const px = norAttr.getX(vi), py = norAttr.getY(vi), pz = norAttr.getZ(vi);
       nx = inv[0] * px + inv[3] * py + inv[6] * pz;
       ny = inv[1] * px + inv[4] * py + inv[7] * pz;
       nz = inv[2] * px + inv[5] * py + inv[8] * pz;
-      const l = Math.hypot(nx, ny, nz) || 1;
-      nx /= l; ny /= l; nz /= l;
+      const l = Math.hypot(nx, ny, nz);
+      if (Number.isFinite(l) && l > 1e-9) { nx /= l; ny /= l; nz /= l; }
+      else { nx = 0; ny = 1; nz = 0; }   // 兜底:退化法线给 -/+Y,避免写出 NaN
     }
     nor.push(nx, ny, nz);
     if (uvAttr) uv.push(uvAttr.getX(vi), uvAttr.getY(vi));
@@ -91,7 +120,10 @@ function canvasPngBytes(image) {
 // ============================================================
 const T = {
   I: v => ({ t: 'I', v }), D: v => ({ t: 'D', v }), L: v => ({ t: 'L', v }),
-  S: v => ({ t: 'S', v }), R: v => ({ t: 'R', v }), B: v => ({ t: 'B', v }),
+  S: v => ({ t: 'S', v }), R: v => ({ t: 'R', v }),
+  // FBX 布尔属性的类型码是 'C'(单字节),不是 'B'。写成 'B' 会让 FBX SDK 解析失步,
+  // 报 "File is corrupted"。取值按 SDK 惯例写 'T'(0x54) / 'F'(0x46)。
+  B: v => ({ t: 'C', v: !!v }),
   d: v => ({ t: 'd', v }), i: v => ({ t: 'i', v }),
 };
 const N = (id, props = [], kids = []) => ({ id, props, kids });
@@ -298,14 +330,32 @@ function buildFBXTree(scene, opts = {}) {
   const connNodes = connections.map(([ctype, from, to, prop]) =>
     N('C', [T.S(ctype), T.L(from), T.L(to), ...(prop ? [T.S(prop)] : [])]));
 
+  // Documents / References / Takes:FBX SDK 期望这些顶层节点存在,缺了 Unity 会视为不完整文件
+  const documents = N('Documents', [], [
+    N('Count', [T.I(1)]),
+    N('Document', [T.L(1000), T.S(''), T.S('Scene')], [
+      N('Properties70', [], [
+        N('P', [T.S('SourceObject'), T.S('object'), T.S(''), T.S('')]),
+        N('P', [T.S('ActiveAnimStackName'), T.S('KString'), T.S(''), T.S('')]),
+      ]),
+      N('RootNode', [T.L(0)]),
+    ]),
+  ]);
+  const references = N('References', [], []);
+  const takes = N('Takes', [], [N('Current', [T.S('')])]);
+
   const root = N('', [], [
     header,
     N('FileId', [T.R(new Uint8Array([0x28, 0xb3, 0x2a, 0xeb, 0xb6, 0x24, 0xcc, 0xc2, 0xbf, 0xc8, 0xb0, 0x2a, 0xa9, 0x2b, 0xfc, 0xf1]))]),
     N('CreationTime', [T.S('1970-01-01 10:00:00:000')]),
+    N('Creator', [T.S('threejstest fbx-exporter.js')]),
     globalSettings,
+    documents,
+    references,
     definitions,
     N('Objects', [], objects),
     N('Connections', [], connNodes),
+    takes,
   ]);
   root.__textures = textures;
   return root;
@@ -340,12 +390,13 @@ function serializeFBXBinary(root) {
 
   function propDataLength(p) {
     switch (p.t) {
-      case 'B': return 1;
+      case 'C': return 1;
       case 'I': return 4;
       case 'F': return 4;
       case 'D': return 8;
       case 'L': return 8;
-      case 'S': case 'R': return 4 + p.v.length + (p.v instanceof Uint8Array ? 0 : 0);
+      case 'S': return 4 + enc.encode(p.v).length;   // 长度必须是 UTF-8 字节数(不能用 .length)
+      case 'R': return 4 + p.v.length;
       case 'd': return 12 + p.v.length * 8;
       case 'i': return 12 + p.v.length * 4;
     }
@@ -373,7 +424,7 @@ function serializeFBXBinary(root) {
     push(new Uint8Array([p.t.charCodeAt(0)]));
     const dv = n => new DataView(new ArrayBuffer(n));
     switch (p.t) {
-      case 'B': { const b = new Uint8Array([p.v ? 1 : 0]); push(b); break; }
+      case 'C': { const b = new Uint8Array([p.v ? 0x54 : 0x46]); push(b); break; }   // 'T' / 'F'
       case 'I': { const d = dv(4); d.setInt32(0, p.v, true); push(new Uint8Array(d.buffer)); break; }
       case 'L': { const d = dv(8); d.setBigInt64(0, BigInt(p.v), true); push(new Uint8Array(d.buffer)); break; }
       case 'D': { const d = dv(8); d.setFloat64(0, p.v, true); push(new Uint8Array(d.buffer)); break; }
@@ -397,7 +448,6 @@ function serializeFBXBinary(root) {
     }
   }
 
-  calc.length = 0;
   // FBX 顶层是平铺元素序列(无包裹根),结尾一个 13 字节哨兵
   let topOff = 27;                          // 文件头 23 + 版本 4
   for (let i = 0; i < root.kids.length; i++) topOff = calc(root.kids[i], topOff, i === root.kids.length - 1);
@@ -407,7 +457,19 @@ function serializeFBXBinary(root) {
   vd.setUint32(0, 7400, true);
   push(new Uint8Array(vd.buffer));
   for (let i = 0; i < root.kids.length; i++) writeNode(root.kids[i], i === root.kids.length - 1);
-  push(new Uint8Array(13));
+  push(new Uint8Array(13));                 // 根节点列表结束哨兵
+
+  // ---- 文件尾(顺序与对齐都不可省,否则 FBX SDK 判定 "File is corrupted")----
+  const bodyLen = length;                   // 含上面 13 字节哨兵
+  const pad = 16 - ((bodyLen + 16) % 16);   // 1..16,保证总长是 16 的整数倍
+  push(FBX_FOOTER_ID);                      // ① 16 字节固定 ID
+  push(new Uint8Array(pad));                // ② 对齐填充
+  push(new Uint8Array(4));                  // ③ 0u32
+  const fv = new DataView(new ArrayBuffer(4));
+  fv.setUint32(0, 7400, true);
+  push(new Uint8Array(fv.buffer));          // ④ 版本重复
+  push(new Uint8Array(120));                // ⑤ 保留区
+  push(FBX_FOOTER_MAGIC);                   // ⑥ 结尾魔法字(文件最后 16 字节)
 
   const out = new Uint8Array(length);
   let off = 0;
