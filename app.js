@@ -51,6 +51,8 @@ function main() {
     setSpin(on) { spin = on; },
     setRot(y) { pivot.rotation.y = y; },
     model: () => currentModel,
+    scene: () => scene,
+    camera: () => camera,
     logo() { makeLogoTexture(); return makeLogoTexture.lastCanvas.toDataURL('image/png'); },
     list() {
       const out = [];
@@ -136,6 +138,7 @@ function main() {
     { id: 'dt201d-clamp', name: 'DT201D 数字钳形表', build: buildClampMeter },
     { id: 'earth-tester', name: '防雷接地检测仪', build: buildEarthTester },
     { id: 'multimeter', name: '数字万用表', build: buildMultimeter },
+    { id: 'hikmicro-h11', name: 'HM-TPH11 手持热成像仪', build: buildThermalImager },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
