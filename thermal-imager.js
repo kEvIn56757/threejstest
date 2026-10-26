@@ -488,10 +488,12 @@ function buildThermalImager(THREE) {
   // ============================================================
   //  4. 键盘(九键)
   // ============================================================
-  const KP_CY = 1.08;
+  // 键盘整体缩放并放在 LCD 外框(y=2.20)与前面板下沿(y≈0.43)之间,避免超出界面
+  const KS = 0.78;
+  const KP_CY = 1.33;
   {
     const sh = new THREE.Shape();
-    const tw = 2.80, bw = 2.24, hh = 1.00, r = 0.22;
+    const tw = 2.80 * KS, bw = 2.24 * KS, hh = 1.00 * KS, r = 0.22 * KS;
     sh.moveTo(-bw + r, -hh);
     sh.lineTo(bw - r, -hh);
     sh.quadraticCurveTo(bw, -hh, bw, -hh + r);
@@ -553,6 +555,7 @@ function buildThermalImager(THREE) {
 
   function keyButton(z, y, w, h, r, cell, name, lift) {
     lift = lift === undefined ? 0.15 : lift;
+    z *= KS; y *= KS; w *= KS; h *= KS; r *= KS;
     plateX(rrShapeSimple(w / 2 - 0.025, h / 2 - 0.025, r), lift, 0.032, matButton,
            name + '_base', KP_X + lift, KP_CY + y, z, true);
     plateX(rrShapeSimple(w / 2 - 0.065, h / 2 - 0.065, r * 0.9), 0.05, 0.02, matButtonHi,
@@ -590,24 +593,26 @@ function buildThermalImager(THREE) {
   const matSideText = new THREE.MeshStandardMaterial({ map: sideTextTex, transparent: true, roughness: 0.6 });
   matSideText.name = 'side_nameplate';
 
+  // 侧板中心对齐头部中心(X=0,Y=KC),不再偏向镜头侧或偏下
+  const SIDE_CX = 0, SIDE_CY = KC;
   [1, -1].forEach(sg => {
     const tag = sg > 0 ? 'R' : 'L';
     // 暗色凹槽(形成清晰的内嵌轮廓)
     plateZ(rrShapeSimple(2.34, 2.34, 0.66), 0.06, 0.02, matShellDk,
-           'side_groove_' + tag, sg * (ZH + 0.085), -0.55, 4.70, true);
+           'side_groove_' + tag, sg * (ZH + 0.085), SIDE_CX, SIDE_CY, true);
     // 面板外圈
     plateZ(rrShapeSimple(2.16, 2.16, 0.62), 0.16, 0.05, matShell,
-           'side_panel_rim_' + tag, sg * (ZH + 0.105), -0.55, 4.70, true);
+           'side_panel_rim_' + tag, sg * (ZH + 0.105), SIDE_CX, SIDE_CY, true);
     // 内凹面
     plateZ(rrShapeSimple(1.94, 1.94, 0.56), 0.10, 0.03, matPanelIn,
-           'side_panel_inner_' + tag, sg * (ZH + 0.055), -0.55, 4.70, true);
+           'side_panel_inner_' + tag, sg * (ZH + 0.055), SIDE_CX, SIDE_CY, true);
   });
   {
-    // 右侧 HIKVISION 丝印(贴在+Z 侧板内凹面上)
-    const m = add(quadZ(1.84, 0.34, 1), matLogo, 'side_logo_R', -0.55, 3.30, ZH + 0.062, true);
+    // 右侧 HIKVISION 丝印(贴在+Z 侧板内凹面上,相对侧板中心偏移不变)
+    const m = add(quadZ(1.84, 0.34, 1), matLogo, 'side_logo_R', SIDE_CX, SIDE_CY - 1.40, ZH + 0.062, true);
     m.castShadow = false;
     // 左侧型号铭牌(贴在 −Z 侧板内凹面上)
-    const m2 = add(quadZ(1.66, 1.10, -1), matSideText, 'side_nameplate_L', -0.55, 4.85, -(ZH + 0.062), true);
+    const m2 = add(quadZ(1.66, 1.10, -1), matSideText, 'side_nameplate_L', SIDE_CX, SIDE_CY + 0.15, -(ZH + 0.062), true);
     m2.castShadow = false;
 
   }
@@ -635,12 +640,13 @@ function buildThermalImager(THREE) {
       depth: 2.30, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2, curveSegments: 10
     });
     geo.rotateY(Math.PI / 2);
-    geo.translate(0.30, Y_TOP - 0.52, -0.35);
+    // 弓形环居中:X 方向 ∈[-1.15,1.15](厚度 2.30),Z 方向 ∈[-1.48,1.48](跨度 2.96)
+    geo.translate(-1.15, Y_TOP - 0.52, 0);
     add(geo, matShell, 'strap_loop', 0, 0, 0, true);
-    // 环内横梁
+    // 环内横梁(与环同心)
     const bar = new THREE.CylinderGeometry(0.085, 0.085, 2.30, 16);
     bar.rotateX(Math.PI / 2);
-    add(bar, matMetalDk, 'strap_bar', 0.30, Y_TOP + 0.30, -0.35, true);
+    add(bar, matMetalDk, 'strap_bar', 0, Y_TOP + 0.30, 0, true);
   }
 
   // ============================================================
