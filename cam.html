@@ -80342,7 +80342,7 @@ class WebGLRenderer {
 
 
 
-const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferGeometry, CanvasTexture, CapsuleGeometry, CircleGeometry, ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, PerspectiveCamera, PlaneGeometry, SRGBColorSpace, Scene, ShadowMaterial, Shape, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, Vector3, WebGLRenderer };
+const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, PerspectiveCamera, PlaneGeometry, SRGBColorSpace, Scene, ShadowMaterial, Shape, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, Vector3, WebGLRenderer };
 // zip.js — 零依赖 ZIP 打包器(浏览器端),用于把「模型 + 多张贴图」合成一个压缩包
 // 暴露 window.ZipPack.makeZip(files, {compress}) -> Promise<Uint8Array>
 //   files: [{ name: 'model.fbx', data: Uint8Array }, ...]
@@ -81387,81 +81387,162 @@ function buildRonkUPS(THREE) {
     interior.add(dome);
   });
 
-  // ============================================================
-  //  前面板(朝 +X)—— 按实拍图
-  // ============================================================
   // RONK logo(左上)
   planeYZ(7.2, 2.0, matLogo, 36.08, 76.8, 9.8, shell, true);
 
-  // 控制面板(按实拍重做):外板 25 宽异形(底部宽弧裙)+ 内台双层台阶
-  {
-    // 外板轮廓:上圆角、两侧立边、底部宽弧
+  //  前面板(朝 +X)—— 按设计线框重做
+  //  布局(从正面看):左上 LCD;LCD 下方一排 6 个状态灯
+  //  (输入/旁路/逆变/电池低压/过载/故障);右侧竖排 ON / OFF / PAGE 三键;
+  //  底缘为向下的弧形。
+  // ============================================================
+  // 面板外形(形状 x 对应世界 −Z,形状 y 对应世界 Y)
+  const PANEL_TOP = 72.1, PANEL_HW = 12.5, PANEL_SIDE_BOT = 59.4, PANEL_CEN_BOT = 58.4;
+  function panelShape(hw, top, sideBot, cenBot, r) {
     const s = new THREE.Shape();
-    s.moveTo(-11.25, 72.1);
-    s.lineTo(11.25, 72.1);
-    s.quadraticCurveTo(12.45, 72.1, 12.45, 70.9);
-    s.lineTo(12.45, 64.2);
-    s.bezierCurveTo(12.45, 61.6, 7.0, 60.85, 0, 60.85);
-    s.bezierCurveTo(-7.0, 60.85, -12.45, 61.6, -12.45, 64.2);
-    s.lineTo(-12.45, 70.9);
-    s.quadraticCurveTo(-12.45, 72.1, -11.25, 72.1);
-    const outer = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.26, bevelEnabled: false }), matPanel);
+    s.moveTo(-(hw - r), top);
+    s.lineTo(hw - r, top);
+    s.quadraticCurveTo(hw, top, hw, top - r);
+    s.lineTo(hw, sideBot);
+    s.bezierCurveTo(hw, sideBot - 0.5, hw * 0.56, cenBot, 0, cenBot);
+    s.bezierCurveTo(-hw * 0.56, cenBot, -hw, sideBot - 0.5, -hw, sideBot);
+    s.lineTo(-hw, top - r);
+    s.quadraticCurveTo(-hw, top, -(hw - r), top);
+    return s;
+  }
+  {
+    // 外板(深色,面板外缘)
+    const outer = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(panelShape(PANEL_HW, PANEL_TOP, PANEL_SIDE_BOT, PANEL_CEN_BOT, 1.2), { depth: 0.26, bevelEnabled: false }),
+      matPanel);
     outer.rotation.y = Math.PI / 2;
-    outer.position.set(35.96, 0, -0.08);
+    outer.position.set(35.96, 0, 0);
     outer.castShadow = true;
     outer.userData.shell = true;
     shell.add(outer);
-
-    // 内台(比外板凸出 0.12,承载 LCD/按钮/按键排),底缘同样微弧
-    const s2 = new THREE.Shape();
-    s2.moveTo(-8.35, 71.4);
-    s2.lineTo(8.35, 71.4);
-    s2.quadraticCurveTo(9.35, 71.4, 9.35, 70.4);
-    s2.lineTo(9.35, 63.2);
-    s2.bezierCurveTo(9.35, 62.35, 5.2, 61.95, 0, 61.95);
-    s2.bezierCurveTo(-5.2, 61.95, -9.35, 62.35, -9.35, 63.2);
-    s2.lineTo(-9.35, 70.4);
-    s2.quadraticCurveTo(-9.35, 71.4, -8.35, 71.4);
-    const inner = new THREE.Mesh(new THREE.ExtrudeGeometry(s2, { depth: 0.24, bevelEnabled: false }), matPanelIn);
+    // 内台(比外板凸出 0.12,四周留出一圈深色边框,近似线框里的粗黑外框)
+    const inner = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(panelShape(PANEL_HW - 0.8, PANEL_TOP - 0.7, PANEL_SIDE_BOT + 0.8, PANEL_CEN_BOT + 1.0, 1.0), { depth: 0.24, bevelEnabled: false }),
+      matPanelIn);
     inner.rotation.y = Math.PI / 2;
-    inner.position.set(36.1, 0, -0.35);
+    inner.position.set(36.1, 0, 0);
     inner.castShadow = true;
     inner.userData.shell = true;
     shell.add(inner);
   }
+  const FACE_X = 36.34;   // 内台正面
 
-  // LCD 模块(按实拍:灰框 10.3×5.7 + 黑框 9.05×4.3 + 黑屏 7.7×2.4,居中偏左 z+1.84)
-  box(0.24, 5.7, 10.3, matTrim, 36.46, 68.1, 1.84, shell, true);
-  box(0.26, 4.3, 9.05, matBezel, 36.47, 68.1, 1.84, shell, true);
-  planeYZ(7.7, 2.4, matLCD, 36.615, 68.1, 1.84, shell, true);
+  // ---------- LCD(左上):黑色粗边框 + 黑色屏 ----------
+  // 线框中 LCD 外框约 11.7 × 4.1 cm,屏幕有效区约 10.2 × 2.3 cm,中心 (y 68.0, z +3.35)
+  const LCD_Y = 68.0, LCD_Z = 3.35;
+  box(0.20, 4.13, 11.70, matBezel, FACE_X + 0.10, LCD_Y, LCD_Z, shell, true);
+  planeYZ(10.25, 2.33, matLCD, FACE_X + 0.205, LCD_Y, LCD_Z, shell, true);
 
-  // 3 只大按钮(内台右侧竖排):暗环+铬环+暗缝+金属钮面+中心点,各带绿色指示灯
-  [69.4, 66.6, 63.9].forEach(y => {
-    cylX(0.90, 0.30, matToggle, 36.49, y, -8.0, shell, true);
-    cylX(0.78, 0.32, matButton, 36.50, y, -8.0, shell, true);
-    cylX(0.52, 0.34, matGrille, 36.51, y, -8.0, shell, true);
-    cylX(0.40, 0.36, matMetal, 36.52, y, -8.0, shell, true);
-    cylX(0.07, 0.38, matGrille, 36.53, y, -8.0, shell, true);
-    cylX(0.19, 0.16, matLedG, 36.44, y + 1.37, -7.5, shell, true);
-  });
-
-  // 底排 6 只小按钮(LCD 下方一排,各带上方 LED):绿×4 红×1 绿×1
-  [6.21, 4.39, 2.58, 0.76, -1.05, -2.87].forEach((z, i) => {
-    cylX(0.62, 0.22, (i === 4) ? matPos : matToggle, 36.45, 64.1, z, shell, true);
-    cylX(0.46, 0.25, matButton, 36.465, 64.1, z, shell, true);
-    cylX(0.17, 0.16, (i === 4) ? matLedR : matLedG, 36.44, 65.0, z, shell, true);
-  });
-
-  // 两翼装饰杠(左右各 4 条圆头凸条,在外板翼面上)
-  [70.9, 68.6, 66.1, 63.6].forEach(y => {
-    [10.9, -10.9].forEach(z => {
-      const d = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.5, 4, 12), matTrim);
-      d.rotation.x = Math.PI / 2;
-      d.position.set(36.1, y, z);
-      d.userData.shell = true;
-      shell.add(d);
+  // ---------- LCD 下方一排 6 个状态指示灯(白色方块 + 顶部黑条 LED 窗 + 黑色图符) ----------
+  function pill(g, x, y, w, h) {
+    const r = h / 2;
+    g.beginPath();
+    g.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5);
+    g.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+    g.closePath();
+    g.fill();
+  }
+  function arrowHead(g, x, y, ang, s) {
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x - s * Math.cos(ang - 0.45), y - s * Math.sin(ang - 0.45));
+    g.lineTo(x - s * Math.cos(ang + 0.45), y - s * Math.sin(ang + 0.45));
+    g.closePath();
+    g.fill();
+  }
+  function sineWave(g, x0, x1, yc, amp, periods) {
+    g.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const t = i / 48;
+      const x = x0 + (x1 - x0) * t, y = yc - amp * Math.sin(t * periods * Math.PI * 2);
+      if (i) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    g.stroke();
+  }
+  const ICON_DRAW = [
+    // 0 输入(整流:~ 在左上,— 在右下,斜线)
+    (g) => {
+      g.beginPath(); g.moveTo(52, 214); g.lineTo(204, 92); g.stroke();
+      sineWave(g, 58, 112, 124, 11, 1);
+      g.beginPath(); g.moveTo(150, 186); g.lineTo(200, 186); g.stroke();
+    },
+    // 1 旁路(阶梯双箭头)
+    (g) => {
+      g.beginPath(); g.moveTo(44, 120); g.lineTo(206, 120); g.stroke();
+      arrowHead(g, 210, 120, 0, 22);
+      g.beginPath(); g.moveTo(44, 176); g.lineTo(112, 176); g.lineTo(146, 176); g.stroke();
+      g.beginPath(); g.moveTo(132, 176); g.lineTo(206, 176); g.stroke();
+      arrowHead(g, 210, 176, 0, 22);
+    },
+    // 2 逆变(直流→交流:— 在左上,~ 在右下,斜线)
+    (g) => {
+      g.beginPath(); g.moveTo(52, 214); g.lineTo(204, 92); g.stroke();
+      g.beginPath(); g.moveTo(56, 124); g.lineTo(104, 124); g.stroke();
+      sineWave(g, 124, 202, 186, 11, 1);
+    },
+    // 3 电池低压(电池外形,底部实心表示低电量)
+    (g) => {
+      g.strokeRect(52, 120, 152, 88);
+      g.fillRect(108, 100, 40, 20);
+      g.fillRect(62, 176, 132, 26);
+    },
+    // 4 过载(跷跷板 + 支点三角 + 重物)
+    (g) => {
+      g.beginPath(); g.moveTo(58, 122); g.lineTo(198, 150); g.stroke();
+      g.beginPath(); g.arc(58, 122, 7, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(186, 146, 10, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.moveTo(128, 164); g.lineTo(98, 214); g.lineTo(158, 214); g.closePath(); g.stroke();
+    },
+    // 5 故障(警告三角 + !)
+    (g) => {
+      g.beginPath(); g.moveTo(128, 98); g.lineTo(210, 214); g.lineTo(46, 214); g.closePath(); g.stroke();
+      g.lineWidth = 14; g.beginPath(); g.moveTo(128, 134); g.lineTo(128, 180); g.stroke();
+      g.lineWidth = 10; g.beginPath(); g.arc(128, 200, 8, 0, Math.PI * 2); g.fill();
+    },
+  ];
+  const ICON_LED = ['#2f8f46', '#b07f24', '#2f8f46', '#b07f24', '#b07f24', '#a02f2f']; // 未点亮时的窗口底色
+  const ICON_Z = [9.67, 7.13, 4.61, 2.07, -0.46, -2.97];                             // 线框中 6 个图标中心
+  const ICON_Y = 62.16, ICON_S = 1.75;
+  ICON_DRAW.forEach((draw, i) => {
+    const tex = makeCanvasTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#e4e7ea'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#0d0f12'; g.fillRect(0, 0, w, 64);
+      g.fillStyle = '#c3c9cf'; pill(g, 92, 16, 72, 32);
+      g.fillStyle = ICON_LED[i]; pill(g, 100, 22, 56, 20);
+      g.fillStyle = '#0d0f12'; g.strokeStyle = '#0d0f12';
+      g.lineWidth = 10; g.lineCap = 'round'; g.lineJoin = 'round';
+      draw(g);
+      g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
     });
+    const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.0 });
+    m.name = 'status_icon_' + i;
+    planeYZ(ICON_S, ICON_S, m, FACE_X + 0.02, ICON_Y, ICON_Z[i], shell, true);
   });
+
+  // ---------- 右侧 ON / OFF / PAGE 三个圆键(竖排) ----------
+  const BTN_Z = -9.31;
+  [['ON', 69.54], ['OFF', 65.35], ['PAGE', 61.26]].forEach(([label, y]) => {
+    cylX(1.55, 0.26, matToggle, FACE_X + 0.13, y, BTN_Z, shell, true);   // 暗色底座
+    cylX(1.30, 0.14, matButton, FACE_X + 0.33, y, BTN_Z, shell, true);   // 金属按钮面
+    const texBtn = makeCanvasTex(256, 256, (g, w, h) => {
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = '#d8dce0';
+      g.font = 'bold ' + (label.length > 2 ? 56 : 68) + 'px Arial, Helvetica, sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(label, w / 2, h / 2 + 4);
+    });
+    const mBtn = new THREE.MeshStandardMaterial({ map: texBtn, transparent: true, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    mBtn.name = 'button_label_' + label;
+    planeYZ(2.4, 2.4, mBtn, FACE_X + 0.41, y, BTN_Z, shell, true);
+  });
+
+  // ---------- 面板沉头螺栓 ----------
+  [[82, -14.8], [82, 14.8], [43.5, -14.8], [43.5, 14.8], [3, -14.8], [3, 14.8]]
+    .forEach(([y, z]) => cylX(0.3, 0.18, matScrew, 36.08, y, z, shell, true));
 
   // 大面积冲孔进风网栅(26.9 × 29,圆孔阵)+ 防尘过滤网
   box(0.12, 30, 27.8, matFilter, 35.9, 18.5, -0.5, shell, true);
