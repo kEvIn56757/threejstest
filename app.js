@@ -1,4 +1,5 @@
 const THREE = await import('./vendor/three.module.js');
+const { importModelFiles } = await import('./importer.js');
 
 main();
 
@@ -76,6 +77,8 @@ function main() {
   }
 
   let dragging = false, lastX = 0, lastY = 0;
+  // 缩放范围随模型大小自适应(导入的大模型需要退得更远,小件需要凑得更近)
+  let zoomMin = 11, zoomMax = 300;
   const el = renderer.domElement;
   el.addEventListener('pointerdown', e => {
     dragging = true; lastX = e.clientX; lastY = e.clientY;
@@ -93,7 +96,7 @@ function main() {
   el.addEventListener('pointercancel', () => { dragging = false; });
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    sph.radius = THREE.MathUtils.clamp(sph.radius * Math.exp(e.deltaY * 0.0012), 11, 300);
+    sph.radius = THREE.MathUtils.clamp(sph.radius * Math.exp(e.deltaY * 0.0012), zoomMin, zoomMax);
     applyCamera();
   }, { passive: false });
 
@@ -145,6 +148,7 @@ function main() {
   const pivot = new THREE.Group();
   scene.add(pivot);
   let currentModel = null;
+  let currentRec = null;
   let currentId = MODELS[0].id;
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
@@ -161,25 +165,68 @@ function main() {
   function setModel(id) {
     const rec = MODELS.find(m => m.id === id) || MODELS[0];
     currentId = rec.id;
+    currentRec = rec;
     if (currentModel) {
       pivot.remove(currentModel);
-      currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
+      // 导入的模型是常驻对象(切回来还用它),不能销毁几何
+      if (!rec.persistent) currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
     }
     currentModel = rec.build(THREE);
     pivot.add(currentModel);
     nameModel();
     // 自动取景:模型垂直居中到原点,按包围球调整轨道半径,让不同大小的模型都合适
+    // 取包围盒时先把转台角度归零:转台一直在转,带旋转算出来的世界包围盒
+    // 中心会被转偏,拿它去归位会让模型偏离画面中心
+    const spinSaved = pivot.rotation.y;
+    pivot.rotation.set(0, 0, 0);
+    pivot.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(currentModel);
-    currentModel.position.y -= (box.min.y + box.max.y) / 2;
+    // 导入的模型只在首次归位,之后由用户在面板里自己调,重选时不再覆盖
+    if (!rec.persistent || !rec.positioned) {
+      currentModel.position.y -= (box.min.y + box.max.y) / 2;
+      if (rec.persistent) {
+        // 外部模型的原点常常不在几何中心,三个轴都要归位,否则相机会对着空气看
+        currentModel.position.x -= (box.min.x + box.max.x) / 2;
+        currentModel.position.z -= (box.min.z + box.max.z) / 2;
+        rec.positioned = true;
+        rec.basePos = currentModel.position.clone();
+        rec.baseScale = currentModel.scale.x || 1;
+        rec.edit = { px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0, s: 1 };
+      }
+    }
     const box2 = new THREE.Box3().setFromObject(currentModel);
     const sphere = box2.getBoundingSphere(new THREE.Sphere());
-    // 细高/细长的模型(如钳形表)按包围球取景会被裁切,这里按包围盒的实际宽高做画幅适配
+    // 取景按「最长边」算:模型朝向千奇百怪(比如平躺的平板,Z 方向最长),
+    // 只看 x/y 会把 Z 方向的尺寸漏掉,一转就出画。转台还会一直转,所以按最大边留余量。
     const size = box2.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
     const halfFov = (camera.fov * Math.PI / 180) / 2;
-    const fitV = (size.y / 2) / Math.tan(halfFov);
-    const fitH = (size.x / 2) / (Math.tan(halfFov) * Math.max(camera.aspect, 0.2));
-    const fit = Math.max(sphere.radius * 1.9, Math.max(fitV, fitH) * 1.18);
-    sph.radius = THREE.MathUtils.clamp(fit, 11, 400);
+    let fit;
+    if (rec.persistent) {
+      // 外部模型朝向不确定(常见平躺、长轴在 Z),按最长边+包围球留足余量,
+      // 转台转到任何角度都不该出画
+      const fitV = (maxDim / 2) / Math.tan(halfFov);
+      const fitH = (maxDim / 2) / (Math.tan(halfFov) * Math.max(camera.aspect, 0.2));
+      fit = Math.max(sphere.radius * 1.6, Math.max(fitV, fitH) * 1.12);
+    } else {
+      // 内置模型都是按「正面朝 +X、竖直方向为 Y」建的,沿用原来的精确取景,保持观感不变
+      const fitV = (size.y / 2) / Math.tan(halfFov);
+      const fitH = (size.x / 2) / (Math.tan(halfFov) * Math.max(camera.aspect, 0.2));
+      fit = Math.max(sphere.radius * 1.9, Math.max(fitV, fitH) * 1.18);
+    }
+    pivot.rotation.y = spinSaved;              // 恢复转台(包围盒已经量完)
+    pivot.updateMatrixWorld(true);
+    sph.radius = THREE.MathUtils.clamp(fit, 11, 5000);
+    // 缩放范围随模型自适应:导入的大件要能退得更远,小件要能凑得更近
+    zoomMin = Math.max(2, sphere.radius * 0.55);
+    zoomMax = Math.max(300, sphere.radius * 12);
+    // 背景球 / 阴影地面 / 远裁剪面都要按模型大小跟着长,
+    // 否则大模型会把相机推到背景球外面(背景直接变黑)、地面也被裁在肚子里
+    const bgK = Math.max(1, (sph.radius * 2.6) / 90);
+    backdrop.scale.setScalar(bgK);
+    ground.scale.setScalar(Math.max(1, sphere.radius / 30));
+    camera.far = Math.max(500, sph.radius * 6, 90 * bgK * 2);
+    camera.updateProjectionMatrix();
     // 阴影相机随模型大小自适应(小模型保持原参数不变)
     const sr = Math.max(13, sphere.radius * 1.15);
     key.shadow.camera.left = -sr; key.shadow.camera.right = sr;
@@ -195,7 +242,16 @@ function main() {
     shellOn = true;
     currentModel.traverse(o => { if (o.isMesh && o.userData.shell) o.visible = true; });
     const b = document.getElementById('btn-shell');
-    if (b) b.textContent = '查看内部';
+    if (b) {
+      b.textContent = '查看内部';
+      // 「查看内部」是给程序化建模的外壳用的,导入模型没有这个概念
+      b.disabled = !!rec.persistent;
+      b.title = rec.persistent
+        ? '导入模型没有外壳/内部结构区分,用左侧面板的部件列表控制显隐'
+        : '隐藏/显示外壳,查看内部结构';
+    }
+    if (rec.persistent) applyEdit(rec);   // 恢复用户在面板里调过的变换
+    updatePanel(rec);
     return rec;
   }
 
@@ -343,6 +399,245 @@ function main() {
         return { name: rec.id + '.zip', base64: btoa(bin) };
       }
     };
+  }
+
+  // ============================================================
+  //  导入外部 FBX 模型
+  //  导入后这条记录和内置模型一样进下拉列表,pivot 转台、自动取景、导出 zip 全部复用
+  // ============================================================
+  let toastTimer = 0;
+  function toast(msg, ms = 2400) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  }
+
+  // 面板里的位移/旋转/缩放是相对导入时位置的增量,不破坏导入时算好的归位与单位
+  function applyEdit(rec) {
+    const g = rec.group, e = rec.edit;
+    if (!g || !e || !rec.basePos) return;
+    const d = Math.PI / 180;
+    g.position.set(rec.basePos.x + e.px, rec.basePos.y + e.py, rec.basePos.z + e.pz);
+    g.rotation.set(e.rx * d, e.ry * d, e.rz * d);
+    const s = (rec.baseScale || 1) * (e.s || 1);
+    g.scale.setScalar(s);
+    g.updateMatrixWorld(true);
+  }
+
+  function updatePanel(rec) {
+    const panel = document.getElementById('panel');
+    if (!panel) return;
+    if (!rec || !rec.persistent) { panel.hidden = true; return; }
+    panel.hidden = false;
+
+    const s = rec.stats;
+    document.getElementById('p-name').textContent = rec.name;
+    const info = document.getElementById('p-info');
+    info.textContent = '';
+    const l1 = document.createElement('div');
+    l1.textContent = `${s.meshes} 个部件 · ${s.triangles.toLocaleString()} 三角面 · ${s.materials} 个材质`
+      + (s.textured ? ` · ${s.textured} 张已挂贴图` : '');
+    const l2 = document.createElement('div');
+    const fmt = v => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+    l2.textContent = `尺寸 ${s.size.map(fmt).join(' × ')} cm`
+      + `(导出后 ${s.size.map(v => (v / 100).toFixed(2)).join(' × ')} m)`;
+    info.append(l1, l2);
+    for (const n of rec.notes || []) {
+      const d = document.createElement('div');
+      d.className = 'p-note';
+      d.textContent = '· ' + n;
+      info.appendChild(d);
+    }
+
+    // 变换输入回填
+    const e = rec.edit;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('p-px', +e.px.toFixed(3)); set('p-py', +e.py.toFixed(3)); set('p-pz', +e.pz.toFixed(3));
+    set('p-rx', +e.rx.toFixed(2)); set('p-ry', +e.ry.toFixed(2)); set('p-rz', +e.rz.toFixed(2));
+    set('p-scale', +e.s.toFixed(3));
+
+    // 部件列表(取消勾选 = 不显示,同时从导出中排除)
+    const parts = document.getElementById('p-parts');
+    parts.textContent = '';
+    const head = document.createElement('div');
+    head.className = 'p-head-row';
+    head.textContent = '部件(取消勾选 = 不导出)';
+    const filter = document.createElement('input');
+    filter.type = 'search';
+    filter.id = 'p-filter';
+    filter.placeholder = '按名称筛选部件…';
+    parts.append(head, filter);
+
+    const list = document.createElement('div');
+    list.className = 'p-list';
+    const rows = [];
+    let n = 0, shown = 0;
+    const MAX_ROWS = 2000;
+    rec.group.traverse(o => {
+      if (!o.isMesh) return;
+      n++;
+      if (n > MAX_ROWS) return;
+      shown++;
+      const row = document.createElement('label');
+      row.className = 'p-part';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !o.userData.noExport;
+      cb.addEventListener('change', () => {
+        o.visible = cb.checked;
+        o.userData.noExport = !cb.checked;
+      });
+      const nm = document.createElement('span');
+      nm.textContent = o.name || '(未命名)';
+      nm.title = o.name || '';
+      const tri = document.createElement('em');
+      const g = o.geometry;
+      tri.textContent = Math.round((g.index ? g.index.count : g.attributes.position.count) / 3).toLocaleString();
+      row.append(cb, nm, tri);
+      list.appendChild(row);
+      rows.push({ row, key: (o.name || '').toLowerCase() });
+    });
+    parts.appendChild(list);
+    filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      for (const r of rows) r.row.hidden = !!q && !r.key.includes(q);
+    });
+    if (n > shown) {
+      const more = document.createElement('div');
+      more.className = 'p-note';
+      more.textContent = `· 另有 ${n - shown} 个部件未列出(超过 ${MAX_ROWS} 个)`;
+      parts.appendChild(more);
+    }
+  }
+
+  async function handleFiles(files) {
+    if (!files || !files.length) return;
+    const btn = document.getElementById('btn-import');
+    const label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '导入中…'; }
+    toast('正在导入模型…', 60000);
+    try {
+      const records = await importModelFiles(files, { onProgress: m => toast(m, 60000) });
+      for (const r of records) {
+        const id = 'imported-' + (MODELS.filter(m => m.persistent).length + 1) + '-' + Date.now().toString(36).slice(-4);
+        const rec = {
+          id,
+          name: '导入 · ' + r.name,
+          persistent: true,
+          group: r.group,
+          stats: r.stats,
+          notes: r.notes,
+          build() { return r.group; },
+        };
+        MODELS.push(rec);
+        const sel2 = document.getElementById('model-select');
+        if (sel2) {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = rec.name;
+          sel2.appendChild(opt);
+          sel2.value = id;
+        }
+        setModel(id);
+      }
+      toast(`已导入 ${records.length} 个模型:${records.map(r => r.name).join('、')}`);
+    } catch (err) {
+      console.error(err);
+      toast('导入失败:' + (err && err.message ? err.message : err), 6000);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = label || '导入模型'; }
+    }
+  }
+
+  {
+    const btnImport = document.getElementById('btn-import');
+    const fileInput = document.getElementById('file-input');
+    if (btnImport && fileInput) {
+      btnImport.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const fs = [...fileInput.files];
+        fileInput.value = '';               // 允许再次选同一个文件
+        handleFiles(fs);
+      });
+    }
+
+    // 拖拽导入:文件 / 整个文件夹 / zip 都行
+    const drop = document.getElementById('drop');
+    let dragDepth = 0;
+    const showDrop = on => { if (drop) drop.hidden = !on; };
+    window.addEventListener('dragenter', e => {
+      if (!e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files')) return;
+      dragDepth++; showDrop(true);
+    });
+    window.addEventListener('dragover', e => {
+      if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault();
+    });
+    window.addEventListener('dragleave', () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) showDrop(false);
+    });
+    window.addEventListener('drop', async e => {
+      if (!e.dataTransfer) return;
+      e.preventDefault();
+      dragDepth = 0; showDrop(false);
+      // 拖文件夹时用 items + webkitGetAsEntry 递归取文件
+      const entries = [...(e.dataTransfer.items || [])]
+        .map(it => (it.webkitGetAsEntry ? it.webkitGetAsEntry() : null))
+        .filter(Boolean);
+      if (entries.length) {
+        const files = [];
+        const walk = async entry => {
+          if (entry.isFile) {
+            files.push(await new Promise((res, rej) => entry.file(res, rej)));
+          } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            const readAll = () => new Promise(res => reader.readEntries(res, () => res([])));
+            for (let batch = await readAll(); batch.length; batch = await readAll()) {
+              for (const child of batch) await walk(child);
+            }
+          }
+        };
+        for (const en of entries) await walk(en);
+        if (files.length) return handleFiles(files);
+      }
+      if (e.dataTransfer.files && e.dataTransfer.files.length) handleFiles([...e.dataTransfer.files]);
+    });
+
+    // 面板:变换输入 / 重置 / 收起
+    const bind = (id, key) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        const rec = currentRec;
+        if (!rec || !rec.persistent || !rec.edit) return;
+        const v = parseFloat(el.value);
+        if (!Number.isFinite(v)) return;
+        rec.edit[key] = v;
+        applyEdit(rec);
+      });
+    };
+    bind('p-px', 'px'); bind('p-py', 'py'); bind('p-pz', 'pz');
+    bind('p-rx', 'rx'); bind('p-ry', 'ry'); bind('p-rz', 'rz');
+    bind('p-scale', 's');
+
+    const reset = document.getElementById('p-reset');
+    if (reset) reset.addEventListener('click', () => {
+      const rec = currentRec;
+      if (!rec || !rec.persistent) return;
+      rec.edit = { px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0, s: 1 };
+      applyEdit(rec);
+      updatePanel(rec);
+      toast('已重置位置/旋转/缩放');
+    });
+
+    const close = document.getElementById('p-close');
+    if (close) close.addEventListener('click', () => {
+      const p = document.getElementById('panel');
+      if (p) p.hidden = true;
+    });
   }
 
   // ---------- animate ----------

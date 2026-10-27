@@ -24,15 +24,107 @@
   }
   #tools button:hover, #tools select:hover { background: #fff; color: #22262b; border-color: #9aa2ab; }
   #tools select { max-width: 180px; }
+  #tools button:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ---------- 导入模型的调整面板 ---------- */
+  #panel {
+    position: fixed; left: 14px; top: 14px; width: 272px; max-height: calc(100vh - 28px);
+    box-sizing: border-box; z-index: 10; display: flex; flex-direction: column; gap: 8px;
+    padding: 12px; border: 1px solid #c6ccd3; border-radius: 10px;
+    background: rgba(255, 255, 255, .93); color: #4a5058;
+    font: 12px/1.55 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    box-shadow: 0 6px 20px rgba(60, 70, 85, .1);
+  }
+  #panel[hidden] { display: none; }
+  #panel .p-head { display: flex; align-items: center; gap: 8px; }
+  #panel .p-head strong { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #22262b; font-size: 13px; }
+  #panel #p-close {
+    border: 0; background: none; color: #8a9199; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px;
+  }
+  #panel #p-close:hover { color: #22262b; }
+  #p-info { color: #6b727a; }
+  #p-info .p-note { color: #a1740f; }
+  #panel .p-grid {
+    display: grid; grid-template-columns: 28px repeat(3, 1fr); gap: 4px 6px; align-items: center;
+    padding-top: 4px; border-top: 1px solid #e3e7eb;
+  }
+  #panel .p-grid label { color: #8a9199; }
+  #panel input[type="number"] {
+    width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 6px;
+    border: 1px solid #d3d8de; border-radius: 6px; background: #fbfcfd; color: #33383e; font: inherit;
+  }
+  #panel input[type="number"]:focus { outline: none; border-color: #8fb3d9; background: #fff; }
+  #panel #p-reset {
+    grid-column: 1 / -1; padding: 5px 0; border: 1px solid #d3d8de; border-radius: 6px;
+    background: #fff; color: #4a5058; cursor: pointer; font: inherit;
+  }
+  #panel #p-reset:hover { border-color: #9aa2ab; color: #22262b; }
+  #p-parts { border-top: 1px solid #e3e7eb; padding-top: 6px; }
+  #p-parts .p-head-row { color: #8a9199; margin-bottom: 4px; }
+  #p-parts #p-filter {
+    width: 100%; box-sizing: border-box; margin-bottom: 4px; padding: 4px 6px;
+    border: 1px solid #d3d8de; border-radius: 6px; background: #fbfcfd; color: #33383e; font: inherit;
+  }
+  #p-parts #p-filter:focus { outline: none; border-color: #8fb3d9; background: #fff; }
+  #p-parts .p-part[hidden] { display: none; }
+  #p-parts .p-list { max-height: 32vh; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+  #p-parts .p-part {
+    display: flex; align-items: center; gap: 6px; padding: 1px 0; cursor: pointer;
+  }
+  #p-parts .p-part span {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #33383e;
+  }
+  #p-parts .p-part em { color: #9aa2ab; font-style: normal; font-variant-numeric: tabular-nums; }
+  #p-parts .p-part input { margin: 0; }
+
+  /* ---------- 提示 / 拖放遮罩 ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 54px; transform: translate(-50%, 10px);
+    padding: 8px 14px; border-radius: 8px; background: rgba(38, 44, 52, .92); color: #f2f4f6;
+    font: 12px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 30;
+    max-width: 80vw; text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #drop {
+    position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+    background: rgba(233, 237, 241, .78); border: 2px dashed #7fa8d4;
+    color: #2f5c8a; font: 15px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    pointer-events: none;
+  }
+  #drop[hidden] { display: none; }
 </style>
 </head>
 <body>
 <div id="tools">
   <select id="model-select" title="选择模型"></select>
+  <button id="btn-import" title="导入外部 FBX 模型:可同时选中 fbx 与贴图,也可选包含 fbx+贴图的 zip,或直接把文件/文件夹拖进窗口">导入模型</button>
   <button id="btn-shell" title="隐藏/显示外壳,查看内部结构">查看内部</button>
   <button id="btn-fbx" title="导出 zip 压缩包:模型 fbx + glb + 全部贴图 + 导入说明,可整包导入 Unity / Blender">导出压缩包</button>
   <button id="btn-glb" title="只导出 glb 单文件(贴图内嵌)">导出 GLB</button>
 </div>
+<input id="file-input" type="file" multiple hidden
+       accept=".fbx,.zip,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga,.tif,.tiff">
+<div id="panel" hidden>
+  <div class="p-head"><strong id="p-name">导入的模型</strong><button id="p-close" title="收起面板">×</button></div>
+  <div id="p-info"></div>
+  <div class="p-grid">
+    <label>位置</label>
+    <input id="p-px" type="number" step="0.5" title="X 偏移">
+    <input id="p-py" type="number" step="0.5" title="Y 偏移">
+    <input id="p-pz" type="number" step="0.5" title="Z 偏移">
+    <label>旋转</label>
+    <input id="p-rx" type="number" step="5" title="绕 X 轴(度)">
+    <input id="p-ry" type="number" step="5" title="绕 Y 轴(度)">
+    <input id="p-rz" type="number" step="5" title="绕 Z 轴(度)">
+    <label>缩放</label>
+    <input id="p-scale" type="number" step="0.1" min="0.001" title="整体缩放倍数(同时影响导出尺寸)">
+    <button id="p-reset" title="位置/旋转/缩放恢复导入时的状态">重置</button>
+  </div>
+  <div id="p-parts"></div>
+</div>
+<div id="toast"></div>
+<div id="drop" hidden>松开即可导入 FBX 模型(可带贴图或 zip 包)</div>
 <div id="hint">拖动旋转 · 滚轮缩放</div>
 <script src="./zip.js"></script>
 <script src="./fbx-exporter.js"></script>
