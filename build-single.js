@@ -7,6 +7,7 @@ const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
 const modelUps = fs.readFileSync('ronk-ups.js', 'utf8') + '\n' + fs.readFileSync('earth-tester.js', 'utf8') + '\n' + fs.readFileSync('multimeter.js', 'utf8');
 const modelThermal = fs.readFileSync('thermal-imager.js', 'utf8');
+const modelRugged = fs.readFileSync('rugged-phone.js', 'utf8');
 const modelClamp = fs.readFileSync('clamp-meter.js', 'utf8');
 const importerSrc = fs.readFileSync('importer.js', 'utf8');
 // 导入功能依赖 three 的 addons(FBXLoader 及其 NURBS/fflate 依赖),先摊平再内联
@@ -35,7 +36,7 @@ const coreS = stripModuleSyntax(core, 'core');
 const modS = stripModuleSyntax(mod, 'module');
 
 // collect THREE.<name> used by app + model builders + exporter + importer
-const used = [...new Set([...[app, modelUps, modelClamp, modelThermal, exporter, importerSrc].join('\n').matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
+const used = [...new Set([...[app, modelUps, modelClamp, modelThermal, modelRugged, exporter, importerSrc].join('\n').matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
 
 // verify each used name is declared somewhere in the three sources
 const declRe = name => new RegExp('(?:function|class|const|let|var)\\s+' + name + '\\b');
@@ -69,18 +70,18 @@ const addonsInline = 'const __addons = (function () {\n'
 const importerInline = stripModuleSyntax(importerSrc, 'importer');
 
 const threeList = used.sort().join(', ');
-const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n${exporter}\n${modelUps}\n${modelClamp}\n${modelThermal}\n${addonsInline}\n${importerInline}\n${appBody}`;
+const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n${exporter}\n${modelUps}\n${modelClamp}\n${modelThermal}\n${modelRugged}\n${addonsInline}\n${importerInline}\n${appBody}`;
 
 // 以 index.html 为唯一模板:把外部 <script src> 换成内联包,避免两处 HTML 各自维护导致走样
 let html = fs.readFileSync('index.html', 'utf8');
 
 let removed = 0;
-html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager)\.js"><\/script>\r?\n?/g, () => {
+html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager|rugged-phone)\.js"><\/script>\r?\n?/g, () => {
   removed++;
   return '';
 });
-if (removed !== 7) {
-  console.error('index.html 里的外部脚本标签数量异常(期望 7 个,实际 ' + removed + ' 个)');
+if (removed !== 8) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 8 个,实际 ' + removed + ' 个)');
   process.exit(1);
 }
 

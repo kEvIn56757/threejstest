@@ -7,7 +7,7 @@ const url = require('url');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || process.argv[2] || 8889);
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || '0.0.0.0';   // 0.0.0.0 便于容器/预览环境访问
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

@@ -100,6 +100,33 @@ function main() {
     applyCamera();
   }, { passive: false });
 
+  // ---------- 环境反射(程序化 equirect 渐变,给金属/橡胶一点天光层次) ----------
+  {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 256;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0.00, '#ffffff');
+    grad.addColorStop(0.42, '#e6ebf1');
+    grad.addColorStop(0.52, '#c9d2da');
+    grad.addColorStop(0.62, '#8d949c');
+    grad.addColorStop(1.00, '#3c4046');
+    g.fillStyle = grad; g.fillRect(0, 0, 512, 256);
+    // 两处柔和亮斑,让高光有走向
+    const blob = (x, y, r, a) => {
+      const rg = g.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+      rg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    };
+    blob(120, 70, 110, 0.95); blob(380, 95, 90, 0.7);
+    const envTex = new THREE.CanvasTexture(c);
+    envTex.mapping = THREE.EquirectangularReflectionMapping;
+    envTex.colorSpace = THREE.SRGBColorSpace;
+    scene.environment = envTex;
+    scene.environmentIntensity = 0.55;
+  }
+
   // ---------- lights ----------
   scene.add(new THREE.HemisphereLight(0xffffff, 0xcdd3da, 1.0));
 
@@ -142,6 +169,7 @@ function main() {
     { id: 'earth-tester', name: '防雷接地检测仪', build: buildEarthTester },
     { id: 'multimeter', name: '数字万用表', build: buildMultimeter },
     { id: 'hikmicro-h11', name: 'HM-TPH11 手持热成像仪', build: buildThermalImager },
+    { id: 'conquest-rugged-phone', name: '征服 CONQUEST 三防终端', build: buildRuggedPhone },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -149,7 +177,7 @@ function main() {
   scene.add(pivot);
   let currentModel = null;
   let currentRec = null;
-  let currentId = MODELS[0].id;
+  let currentId = MODELS[MODELS.length - 1].id;
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
   function nameModel() {
@@ -250,6 +278,7 @@ function main() {
         ? '导入模型没有外壳/内部结构区分,用左侧面板的部件列表控制显隐'
         : '隐藏/显示外壳,查看内部结构';
     }
+    if (sel) sel.value = rec.id;      // 下拉框跟随当前模型(包括默认启动的那一个)
     if (rec.persistent) applyEdit(rec);   // 恢复用户在面板里调过的变换
     updatePanel(rec);
     return rec;
@@ -277,7 +306,7 @@ function main() {
       shellBtn.textContent = shellOn ? '查看内部' : '显示外壳';
     });
   }
-  setModel(MODELS[0].id);
+  setModel(MODELS[MODELS.length - 1].id);
 
   // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
   {
