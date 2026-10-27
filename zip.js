@@ -133,5 +133,74 @@
     return out;
   }
 
-  global.ZipPack = { makeZip, crc32 };
+  // ---------- 解包(导入模型时读 zip) ----------
+  // 只依赖 DecompressionStream,支持 store(0) / deflate(8) 两种方式。
+  // zip64 暂不支持(单包 >4GB 或 >65535 个文件),直接报错让人去手工解压。
+  async function inflateRaw(bytes) {
+    if (typeof global.DecompressionStream === 'undefined') {
+      throw new Error('当前浏览器不支持 DecompressionStream,无法解压 zip,请手工解压后再拖入文件');
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new global.DecompressionStream('deflate-raw'));
+    const buf = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  async function readZip(input, opts) {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const dec = new TextDecoder('utf-8');
+    const filter = (opts && opts.filter) || null;   // (entryName) => boolean
+
+    // 从尾部往前找 EOCD(结尾可能带最多 64KB 注释)
+    let eocd = -1;
+    const stop = Math.max(0, bytes.length - 66000);
+    for (let i = bytes.length - 22; i >= stop; i--) {
+      if (dv.getUint32(i, true) === SIG_EOCD) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('不是有效的 zip 文件(找不到目录结尾记录)');
+
+    const count = dv.getUint16(eocd + 10, true);
+    if (count === 0xFFFF) throw new Error('这个 zip 是 zip64 格式,暂不支持,请手工解压后再拖入文件');
+    let p = dv.getUint32(eocd + 16, true);
+
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      if (dv.getUint32(p, true) !== SIG_CENTRAL) throw new Error('zip 中央目录损坏(第 ' + (i + 1) + ' 项)');
+      const flags = dv.getUint16(p + 8, true);
+      const method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true);
+      const usize = dv.getUint32(p + 24, true);
+      const nlen = dv.getUint16(p + 28, true);
+      const elen = dv.getUint16(p + 30, true);
+      const clen = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      // 0x0800 = 文件名是 UTF-8;没有该位时按 GBK 解也常见,这里先按 UTF-8,失败退回 latin1
+      let name;
+      const nameBytes = bytes.subarray(p + 46, p + 46 + nlen);
+      try { name = dec.decode(nameBytes); }
+      catch (_) { name = Array.from(nameBytes, b => String.fromCharCode(b)).join(''); }
+      p += 46 + nlen + elen + clen;
+
+      if (csize === 0xFFFFFFFF || usize === 0xFFFFFFFF) throw new Error('zip64 条目暂不支持:' + name);
+      if (name.endsWith('/')) continue;                  // 目录项
+      if (filter && !filter(name)) continue;
+
+      // 数据起点要按本地头里的文件名/扩展区长度现算(可能与中央目录不同)
+      if (dv.getUint32(lho, true) !== SIG_LOCAL) throw new Error('zip 本地头损坏:' + name);
+      const lnlen = dv.getUint16(lho + 26, true);
+      const lelen = dv.getUint16(lho + 28, true);
+      const start = lho + 30 + lnlen + lelen;
+      const raw = bytes.subarray(start, start + csize);
+
+      let data;
+      if (method === 0) data = raw.slice();
+      else if (method === 8) data = await inflateRaw(raw);
+      else throw new Error('不支持的压缩方式 ' + method + '(仅 store/deflate):' + name);
+
+      out.push({ name, bytes: data, size: usize, flags });
+    }
+    return out;
+  }
+
+  global.ZipPack = { makeZip, readZip, crc32 };
 })(typeof window !== 'undefined' ? window : globalThis);
