@@ -5,7 +5,15 @@ const core = fs.readFileSync('vendor/three.core.js', 'utf8');
 const mod = fs.readFileSync('vendor/three.module.js', 'utf8');
 const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
-const modelUps = fs.readFileSync('ronk-ups.js', 'utf8') + '\n' + fs.readFileSync('earth-tester.js', 'utf8') + '\n' + fs.readFileSync('multimeter.js', 'utf8');
+const modelSources = [
+  'ronk-ups.js',
+  'earth-tester.js',
+  'multimeter.js',
+  'multimeter-2.js',
+  'air-detector.js',
+  'kindergarten-frame.js',
+  'hikvision-column-speaker.js',
+].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const app = fs.readFileSync('app.js', 'utf8');
 
 function stripModuleSyntax(src, label) {
@@ -27,7 +35,7 @@ const coreS = stripModuleSyntax(core, 'core');
 const modS = stripModuleSyntax(mod, 'module');
 
 // collect THREE.<name> used by app + model builders + exporter
-const used = [...new Set([...[app, modelUps, exporter].join('\n').matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
+const used = [...new Set([...[app, modelSources, exporter].join('\n').matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
 
 // verify each used name is declared somewhere in the three sources
 const declRe = name => new RegExp('(?:function|class|const|let|var)\\s+' + name + '\\b');
@@ -45,18 +53,18 @@ if (appBody.includes('await import')) {
 }
 
 const threeList = used.sort().join(', ');
-const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n${exporter}\n${modelUps}\n${appBody}`;
+const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n${exporter}\n${modelSources}\n${appBody}`;
 
 // 以 index.html 为唯一模板:把外部 <script src> 换成内联包,避免两处 HTML 各自维护导致走样
 let html = fs.readFileSync('index.html', 'utf8');
 
 let removed = 0;
-html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups)\.js"><\/script>\r?\n?/g, () => {
+html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|earth-tester|multimeter|multimeter-2|air-detector|kindergarten-frame|hikvision-column-speaker)\.js"><\/script>\r?\n?/g, () => {
   removed++;
   return '';
 });
-if (removed !== 3) {
-  console.error('index.html 里的外部脚本标签数量异常(期望 3 个,实际 ' + removed + ' 个)');
+if (removed !== 9) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 9 个,实际 ' + removed + ' 个)');
   process.exit(1);
 }
 

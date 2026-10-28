@@ -37,6 +37,7 @@ function main() {
     new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.BackSide, depthWrite: false })
   );
   scene.add(backdrop);
+  backdrop.renderOrder = -1;
   backdrop.userData.noExport = true; // 不导出背景球
 
   // ---------- camera + orbit ----------
@@ -46,6 +47,7 @@ function main() {
   applyCamera();
 
   let spin = true;
+  let maxOrbitRadius = 300;
   window.__debug = {
     setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; sph.radius = r; applyCamera(); },
     setSpin(on) { spin = on; },
@@ -71,6 +73,7 @@ function main() {
   function applyCamera() {
     camera.position.setFromSpherical(sph).add(target);
     camera.lookAt(target);
+    backdrop.position.copy(camera.position);
   }
 
   let dragging = false, lastX = 0, lastY = 0;
@@ -91,7 +94,7 @@ function main() {
   el.addEventListener('pointercancel', () => { dragging = false; });
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    sph.radius = THREE.MathUtils.clamp(sph.radius * Math.exp(e.deltaY * 0.0012), 11, 300);
+    sph.radius = THREE.MathUtils.clamp(sph.radius * Math.exp(e.deltaY * 0.0012), 11, maxOrbitRadius);
     applyCamera();
   }, { passive: false });
 
@@ -135,6 +138,11 @@ function main() {
     { id: 'ronk-ups', name: 'RONK 工业UPS机柜', build: buildRonkUPS },
     { id: 'earth-tester', name: '防雷接地检测仪', build: buildEarthTester },
     { id: 'multimeter', name: '数字万用表', build: buildMultimeter },
+    { id: 'multimeter-2', name: '数字万用表2', build: buildMultimeter2 },
+    { id: 'air-detector', name: '空气检测仪', build: buildAirDetector },
+    { id: 'kindergarten-frame', name: '幼儿园墙挂相框', build: buildKindergartenFrame,
+      view: { theta: 1.45, phi: 1.43, fitViewport: true, spin: false } },
+    { id: 'hikvision-column-speaker', name: '海康威视网络音柱', build: buildHikvisionColumnSpeaker },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -157,6 +165,13 @@ function main() {
   function setModel(id) {
     const rec = MODELS.find(m => m.id === id) || MODELS[0];
     currentId = rec.id;
+    maxOrbitRadius = rec.view?.fitViewport ? 500 : 300;
+    spin = rec.view?.spin !== false;
+    if (rec.view) {
+      sph.theta = rec.view.theta;
+      sph.phi = rec.view.phi;
+      pivot.rotation.set(0, 0, 0);
+    }
     if (currentModel) {
       pivot.remove(currentModel);
       currentModel.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
@@ -170,6 +185,12 @@ function main() {
     const box2 = new THREE.Box3().setFromObject(currentModel);
     const sphere = box2.getBoundingSphere(new THREE.Sphere());
     sph.radius = THREE.MathUtils.clamp(sphere.radius * 1.9, 11, 300);
+    if (rec.view?.fitViewport) {
+      const halfVertical = THREE.MathUtils.degToRad(camera.fov / 2);
+      const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
+      sph.radius = THREE.MathUtils.clamp(
+        sphere.radius * 1.06 / Math.sin(Math.min(halfVertical, halfHorizontal)), 11, 500);
+    }
     // 阴影相机随模型大小自适应(小模型保持原参数不变)
     const sr = Math.max(13, sphere.radius * 1.15);
     key.shadow.camera.left = -sr; key.shadow.camera.right = sr;
