@@ -80434,7 +80434,7 @@ class WebGLRenderer {
 
 
 
-const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CapsuleGeometry, CatmullRomCurve3, CircleGeometry, ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide, EquirectangularReflectionMapping, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, LoadingManager, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, Path, PerspectiveCamera, PlaneGeometry, RepeatWrapping, SRGBColorSpace, Scene, ShadowMaterial, Shape, ShapeGeometry, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, TubeGeometry, Vector2, Vector3, WebGLRenderer };
+const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CapsuleGeometry, CatmullRomCurve3, CircleGeometry, ConeGeometry, CurvePath, CylinderGeometry, DirectionalLight, DoubleSide, EquirectangularReflectionMapping, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, LineCurve3, LoadingManager, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, Path, PerspectiveCamera, PlaneGeometry, RepeatWrapping, SRGBColorSpace, Scene, ShadowMaterial, Shape, ShapeGeometry, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, TubeGeometry, Vector2, Vector3, WebGLRenderer };
 // zip.js — 零依赖 ZIP 打包器(浏览器端),用于把「模型 + 多张贴图」合成一个压缩包
 // 暴露 window.ZipPack.makeZip(files, {compress}) -> Promise<Uint8Array>
 //   files: [{ name: 'model.fbx', data: Uint8Array }, ...]
@@ -82302,6 +82302,1271 @@ function buildMultimeter(THREE) {
     cylX(0.42, 0.42, 0.22, j.cap, 'jack_' + j.name, FT + 0.2, jackY, j.z, 28);
     cylX(0.2, 0.2, 0.08, matHole, 'jack_hole_' + j.name, FT + 0.32, jackY, j.z, 20);
   });
+
+  return group;
+}
+
+// 数字万用表2 — 依据用户提供的 FLUKE 117C 正反面照片建模。
+// 单位 cm，正面 +X，背面 -X；整体尺寸约 17.5 × 8.5 × 4.2 cm（照片估算）。
+function buildMultimeter2(THREE) {
+  const group = new THREE.Group();
+  group.name = 'digital_multimeter_2';
+  const FRONT = 2.02;
+  const BACK = -1.98;
+  const material = (name, color, roughness = 0.65, metalness = 0) => {
+    const m = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    m.name = name;
+    return m;
+  };
+  const yellow = material('fluke_yellow_rubber', 0xe6ad08, 0.85);
+  const darkYellow = material('holster_recess_yellow', 0xb88507, 0.9);
+  const panel = material('front_graphite', 0x303a42, 0.72);
+  const panelEdge = material('case_seam_dark', 0x171d21, 0.8);
+  const knobMat = material('selector_graphite', 0x2d353b, 0.63);
+  const ridgeMat = material('selector_ridges', 0x374148, 0.69);
+  const black = material('socket_recess_black', 0x080b0c, 0.9);
+  const red = material('input_socket_red', 0xaa2430, 0.6);
+  const silver = material('hardware_steel', 0x939da0, 0.32, 0.75);
+  const lavender = material('hold_button_lavender', 0x7b8fc2, 0.65);
+  const keyYellow = material('function_button_yellow', 0xefb400, 0.56);
+
+  function add(geo, mat, name, x = 0, y = 0, u = 0) {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = name;
+    mesh.position.set(x, y, -u);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  }
+  function roundRect(w, h, r) {
+    const s = new THREE.Shape();
+    s.moveTo(-w / 2 + r, -h / 2);
+    s.lineTo(w / 2 - r, -h / 2);
+    s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+    s.lineTo(w / 2, h / 2 - r);
+    s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+    s.lineTo(-w / 2 + r, h / 2);
+    s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+    s.lineTo(-w / 2, -h / 2 + r);
+    s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+    return s;
+  }
+  function profile(scale = 1) {
+    const s = new THREE.Shape();
+    const p = (u, y) => [u * scale, y * scale];
+    s.moveTo(...p(-3.35, 8.15));
+    s.quadraticCurveTo(...p(0, 8.75), ...p(3.35, 8.15));
+    s.quadraticCurveTo(...p(4.15, 8.08), ...p(4.13, 6.75));
+    s.bezierCurveTo(...p(4.12, 3.9), ...p(3.18, 0.2), ...p(3.40, -2.6));
+    s.lineTo(...p(3.65, -6.85));
+    s.quadraticCurveTo(...p(3.73, -8.35), ...p(2.65, -8.40));
+    s.quadraticCurveTo(...p(0, -8.78), ...p(-2.65, -8.40));
+    s.quadraticCurveTo(...p(-3.73, -8.35), ...p(-3.65, -6.85));
+    s.lineTo(...p(-3.40, -2.6));
+    s.bezierCurveTo(...p(-3.18, 0.2), ...p(-4.12, 3.9), ...p(-4.13, 6.75));
+    s.quadraticCurveTo(...p(-4.15, 8.08), ...p(-3.35, 8.15));
+    return s;
+  }
+  function slab(shape, depth, bevel, mat, name, x, y = 0, u = 0) {
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth, bevelEnabled: bevel > 0, bevelSize: bevel,
+      bevelThickness: bevel, bevelSegments: 4, curveSegments: 16,
+    });
+    geo.translate(0, 0, -depth / 2);
+    geo.rotateY(Math.PI / 2);
+    return add(geo, mat, name, x, y, u);
+  }
+  function cylinder(radius, length, mat, name, x, y, u, segments = 64) {
+    const geo = new THREE.CylinderGeometry(radius, radius, length, segments);
+    geo.rotateZ(-Math.PI / 2);
+    return add(geo, mat, name, x, y, u);
+  }
+  function ring(radius, tube, mat, name, x, y, u) {
+    const geo = new THREE.TorusGeometry(radius, tube, 10, 64);
+    geo.rotateY(Math.PI / 2);
+    return add(geo, mat, name, x, y, u);
+  }
+  function canvasTexture(name, width, height, draw) {
+    const c = document.createElement('canvas');
+    c.width = width; c.height = height;
+    draw(c.getContext('2d'), width, height);
+    const tex = new THREE.CanvasTexture(c);
+    tex.name = name;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }
+  function printPlane(tex, name, w, h, x, y, u, back = false) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: tex, transparent: true, opacity: 0.999,
+      depthWrite: false, roughness: 0.78, polygonOffset: true,
+      polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    });
+    mat.name = name + '_ink';
+    const geo = new THREE.PlaneGeometry(w, h);
+    geo.rotateY(back ? -Math.PI / 2 : Math.PI / 2);
+    const mesh = add(geo, mat, name, x, y, u);
+    mesh.castShadow = false;
+    mesh.renderOrder = 2;
+    return mesh;
+  }
+
+  // Thick rubber protective boot with a distinct waist and inset instrument case.
+  slab(profile(), 3.45, 0.22, yellow, 'yellow_protective_holster', 0);
+  slab(profile(0.924), 3.55, 0.10, panelEdge, 'instrument_case', 0.06);
+  slab(profile(0.916), 0.16, 0.055, panel, 'front_face_panel', FRONT - 0.12);
+
+  // LCD assembly: broad grey-green blank display and an arched upper bezel.
+  slab(roundRect(7.0, 4.35, 0.35), 0.20, 0.08, panelEdge,
+    'display_outer_frame', FRONT + 0.01, 5.53);
+  slab(roundRect(6.65, 3.25, 0.24), 0.10, 0.04, knobMat,
+    'display_inner_frame', FRONT + 0.13, 5.12);
+  const lcdTex = canvasTexture('blank_lcd_surface', 1024, 512, (ctx, w, h) => {
+    const gradient = ctx.createLinearGradient(0, 0, w * 0.15, h);
+    gradient.addColorStop(0, '#5a6865');
+    gradient.addColorStop(0.25, '#69736b');
+    gradient.addColorStop(0.8, '#59635c');
+    gradient.addColorStop(1, '#4c5955');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+    const reflection = ctx.createLinearGradient(0, 0, 0, h);
+    reflection.addColorStop(0, 'rgba(220,230,220,0.05)');
+    reflection.addColorStop(0.24, 'rgba(220,230,220,0.10)');
+    reflection.addColorStop(0.37, 'rgba(220,230,220,0)');
+    ctx.fillStyle = reflection; ctx.fillRect(0, 0, w, h);
+  });
+  const lcdMat = material('blank_lcd_glass', 0xffffff, 0.3);
+  lcdMat.map = lcdTex;
+  slab(roundRect(6.13, 2.75, 0.10), 0.035, 0.015, lcdMat,
+    'blank_lcd_screen', FRONT + 0.215, 5.12);
+
+  const headerTex = canvasTexture('fluke_117c_header', 1536, 240, (ctx) => {
+    ctx.fillStyle = '#d5b149'; ctx.fillRect(20, 66, 520, 114);
+    ctx.fillStyle = '#253039'; ctx.font = 'bold 102px Arial';
+    ctx.fillText('FLUKE', 48, 158);
+    ctx.fillStyle = '#d8dedc'; ctx.font = 'italic bold 82px Arial';
+    ctx.fillText('117C', 560, 139);
+    ctx.font = 'italic 54px Arial';
+    ctx.fillText('TRUE RMS', 805, 111);
+    ctx.fillText('MULTIMETER', 805, 170);
+  });
+  printPlane(headerTex, 'brand_and_model_print', 6.8, 1.05, FRONT + 0.21, 7.12, 0);
+
+  // Four rectangular keys, plus a separate circular backlight button.
+  const buttonUs = [-2.53, -0.93, 0.67, 2.27];
+  buttonUs.forEach((u, i) => {
+    slab(roundRect(1.35, 0.83, 0.16), 0.10, 0.035, black,
+      'key_recess_' + i, FRONT + 0.02, 2.57, u);
+    slab(roundRect(1.16, 0.65, 0.11), 0.18, 0.035,
+      [lavender, knobMat, knobMat, keyYellow][i],
+      'function_key_' + i, FRONT + 0.14, 2.57, u);
+  });
+  cylinder(0.44, 0.16, black, 'backlight_button_recess', FRONT + 0.04, 1.22, 2.5);
+  cylinder(0.36, 0.22, knobMat, 'backlight_button', FRONT + 0.16, 1.22, 2.5);
+
+  // Mode switch is offset left, leaving a vertical column of symbols on the right.
+  const dialU = -0.9, dialY = -1.58, dialR = 2.40;
+  cylinder(dialR + 0.10, 0.16, black, 'selector_recess', FRONT + 0.055, dialY, dialU);
+  cylinder(dialR, 0.43, knobMat, 'large_rotary_selector', FRONT + 0.29, dialY, dialU, 96);
+  for (let i = 0; i < 56; i++) {
+    const angle = i * Math.PI * 2 / 56;
+    const tooth = add(new THREE.BoxGeometry(0.30, 0.10, 0.12), ridgeMat,
+      'selector_grip_' + String(i).padStart(2, '0'), FRONT + 0.31,
+      dialY + Math.cos(angle) * dialR, dialU + Math.sin(angle) * dialR);
+    tooth.rotation.x = angle;
+  }
+  slab(roundRect(0.76, 4.48, 0.19), 0.28, 0.07, ridgeMat,
+    'raised_selector_handle', FRONT + 0.60, dialY, dialU);
+  cylinder(0.155, 0.045, silver, 'selector_pointer_dot', FRONT + 0.82, dialY + 1.82, dialU, 32);
+
+  // Recessed banana sockets: black wells with two red insulating collars.
+  [-2.25, 0, 2.25].forEach((u, i) => {
+    cylinder(0.59, 0.12, panelEdge, 'socket_well_' + i, FRONT + 0.055, -6.82, u);
+    cylinder(0.46, 0.10, black, 'socket_bore_' + i, FRONT + 0.13, -6.82, u);
+    ring(0.335, 0.065, i === 1 ? panelEdge : red,
+      'socket_collar_' + i, FRONT + 0.205, -6.82, u);
+    cylinder(0.245, 0.025, black, 'socket_hole_' + i, FRONT + 0.22, -6.82, u);
+  });
+
+  // All face markings are drawn at their physical positions, so geometry and ink align.
+  const faceTex = canvasTexture('117c_front_markings', 1536, 3200, (ctx, w, h) => {
+    const px = u => (u + 4.25) / 8.5 * w;
+    const py = y => (8.75 - y) / 17.5 * h;
+    const text = (label, u, y, size = 0.31, color = '#cbd6d7', bold = true) => {
+      ctx.fillStyle = color;
+      ctx.font = `${bold ? 'bold ' : ''}${Math.round(size / 8.5 * w)}px Arial, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, px(u), py(y));
+    };
+    text('VoltAlert', 0, 7.96, 0.26);
+    ['HOLD', 'MIN MAX', 'RANGE'].forEach((label, i) => text(label, buttonUs[i], 2.57, i === 1 ? 0.23 : 0.26, '#f1f3f1'));
+    text('Lo / Hi', 0.67, 3.08, 0.22, '#858f8f');
+    text('AUTO-V', -2.47, 1.49, 0.29);
+    text('LoZ', -2.45, 1.13, 0.29);
+    text('OFF', -1.13, 1.39, 0.34);
+    text('∿', 0.05, 1.49, 0.47);
+    text('V', 0.04, 1.10, 0.44);
+    text('Hz', 0.64, 1.43, 0.28, '#d2ad3c');
+    text('⎓', 1.03, 0.86, 0.43);
+    text('V', 1.03, 0.47, 0.43);
+    text('∿', 2.0, 0.0, 0.47);
+    text('mV', 2.0, -0.43, 0.43);
+    text('⎓', 2.76, -0.45, 0.33, '#d2ad3c');
+    text('Ω', 2.16, -1.58, 0.56, '#d2dddf', false);
+    text('))))', 2.13, -2.68, 0.37, '#d2dddf', false);
+    text('→Ι', 1.57, -3.59, 0.38);
+    text('─|(─', 2.31, -3.87, 0.32, '#d2ad3c');
+    text('Volt', -2.38, -4.22, 0.30);
+    text('Alert', -2.38, -4.58, 0.30);
+    text('⎓', -1.12, -4.31, 0.41);
+    text('A', -1.12, -4.73, 0.45);
+    text('∿', 0.16, -4.21, 0.42);
+    text('A', 0.16, -4.68, 0.44);
+    text('Hz', 0.74, -4.76, 0.27, '#d2ad3c');
+    text('A', -2.25, -5.94, 0.35, '#a3b1ae');
+    text('COM', 0, -5.94, 0.35, '#a3b1ae');
+    text('V Ω )))', 2.25, -5.73, 0.30, '#a3b1ae');
+    text('─|(─ →Ι', 2.25, -6.10, 0.27, '#a3b1ae');
+    text('10 A', -1.2, -7.37, 0.29);
+    text('FUSED', -1.2, -7.69, 0.28);
+    text('⚠', 1.1, -6.98, 0.43);
+    text('CAT Ⅲ', 1.17, -7.38, 0.29);
+    text('600 V', 1.17, -7.72, 0.29);
+    text('⏚', 1.17, -8.0, 0.35);
+    // Sun icon on the round light key.
+    ctx.strokeStyle = '#d9e0e1'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(px(2.5), py(1.22), 22, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(px(2.5) + Math.cos(a) * 32, py(1.22) + Math.sin(a) * 32);
+      ctx.lineTo(px(2.5) + Math.cos(a) * 44, py(1.22) + Math.sin(a) * 44);
+      ctx.stroke();
+    }
+  });
+  // The face print sits behind protruding controls; button legends use a separate plane.
+  printPlane(faceTex, 'face_silkscreen', 8.5, 17.5, FRONT + 0.035, 0, 0);
+  const keyTex = canvasTexture('key_legends', 1200, 180, ctx => {
+    ctx.fillStyle = '#eef2f2'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ['HOLD', 'MIN MAX', 'RANGE'].forEach((label, i) => {
+      ctx.font = `bold ${i === 1 ? 43 : 49}px Arial`;
+      ctx.fillText(label, 145 + i * 305, 90);
+    });
+  });
+  printPlane(keyTex, 'button_legend_print', 6.3, 0.95, FRONT + 0.28, 2.57, -0.15);
+  const lightTex = canvasTexture('backlight_icon', 256, 256, ctx => {
+    ctx.strokeStyle = '#d9e0e1'; ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.arc(128, 128, 38, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      ctx.beginPath(); ctx.moveTo(128 + Math.cos(a) * 60, 128 + Math.sin(a) * 60);
+      ctx.lineTo(128 + Math.cos(a) * 86, 128 + Math.sin(a) * 86); ctx.stroke();
+    }
+  });
+  printPlane(lightTex, 'backlight_key_icon', 0.62, 0.62, FRONT + 0.28, 1.22, 2.5);
+
+  // Rear boot: physical probe channels, accessory attachment recess, folding stand.
+  slab(roundRect(5.75, 5.1, 0.4), 0.08, 0.05, yellow,
+    'rear_accessory_panel', BACK - 0.005, 5.34);
+  const attachment = roundRect(2.85, 1.85, 0.18);
+  const attachmentMat = material('accessory_recess_dark', 0x30363b, 0.8);
+  slab(attachment, 0.08, 0.025, attachmentMat,
+    'rear_accessory_recess', BACK - 0.12, 5.53);
+  // A yellow rim gives the upper accessory recess its characteristic D shape.
+  const dRim = new THREE.Shape();
+  dRim.moveTo(-1.63, 0.98); dRim.lineTo(1.63, 0.98);
+  dRim.lineTo(1.63, 0.30);
+  dRim.bezierCurveTo(1.63, -1.05, -1.63, -1.05, -1.63, 0.30);
+  dRim.closePath();
+  const dInset = new THREE.Path();
+  dInset.moveTo(-1.40, 0.75); dInset.lineTo(-1.40, 0.28);
+  dInset.bezierCurveTo(-1.40, -0.79, 1.40, -0.79, 1.40, 0.28);
+  dInset.lineTo(1.40, 0.75); dInset.closePath();
+  dRim.holes.push(dInset);
+  slab(dRim, 0.16, 0.025, yellow, 'accessory_D_shaped_rim', BACK - 0.20, 5.50);
+
+  [-3.22, 3.22].forEach((u, i) => {
+    slab(roundRect(0.84, 4.8, 0.28), 0.08, 0.025, darkYellow,
+      'probe_channel_recess_' + i, BACK - 0.11, 5.47, u);
+    for (const offset of [-0.40, 0.40]) {
+      slab(roundRect(0.20, 4.9, 0.09), 0.46, 0.065, yellow,
+        'probe_channel_rail_' + i + '_' + offset, BACK - 0.22, 5.48, u + offset);
+    }
+    slab(roundRect(1.0, 0.45, 0.18), 0.10, 0.04, darkYellow,
+      'probe_retaining_slot_' + i, BACK - 0.18, 2.92, u);
+  });
+
+  slab(roundRect(4.80, 10.3, 0.40), 0.10, 0.06, panelEdge,
+    'rear_stand_recess', BACK - 0.08, -2.35);
+  const stand = slab(roundRect(4.50, 9.85, 0.33), 0.22, 0.055, knobMat,
+    'folding_rear_stand', BACK - 0.22, -2.48);
+  slab(roundRect(2.70, 1.40, 0.13), 0.14, 0.06, ridgeMat,
+    'rear_stand_hinge', BACK - 0.34, 2.42);
+  cylinder(0.31, 0.08, black, 'rear_hinge_screw_well', BACK - 0.47, 2.42, 0, 32);
+  cylinder(0.18, 0.05, panelEdge, 'rear_hinge_screw', BACK - 0.53, 2.42, 0, 24);
+  for (const a of [Math.PI / 4, -Math.PI / 4]) {
+    const groove = add(new THREE.BoxGeometry(0.02, 0.035, 0.25), black,
+      'hinge_screw_cross_' + a, BACK - 0.56, 2.42, 0);
+    groove.rotation.x = a;
+  }
+
+  const backTex = canvasTexture('rear_stand_instructions', 1024, 2250, (ctx, w) => {
+    ctx.fillStyle = '#141b20'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const lines = [
+      ['按住下列按钮再', 190, 78], ['拧旋钮开机选择', 300, 78],
+      ['MIN MAX  停止哔鸣声', 520, 64], ['停止自动关机', 680, 72],
+      ['☼  停止自动关灯', 830, 72], ['⚠', 1040, 100],
+      ['AUTO-V  LoZ 意指', 1210, 66], ['自动选择 VAC 或 VDC', 1390, 62],
+      ['（低阻抗输入）', 1530, 72], ['只适用于', 1680, 72],
+      ['114, 116 & 117 型号', 1840, 62], ['FLUKE', 2090, 100],
+    ];
+    lines.forEach(([text, y, size]) => {
+      ctx.font = `${text === 'FLUKE' ? 'bold ' : ''}${size}px "Microsoft YaHei", Arial, sans-serif`;
+      ctx.fillText(text, w / 2, y);
+    });
+    ctx.strokeStyle = '#141b20'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(80, 930); ctx.lineTo(w - 80, 930); ctx.stroke();
+  });
+  printPlane(backTex, 'rear_stand_molded_text', 3.98, 8.75,
+    BACK - 0.39, -2.69, 0, true);
+  const hookTex = canvasTexture('accessory_mount_label', 1024, 160, ctx => {
+    ctx.fillStyle = '#b08007'; ctx.textAlign = 'center'; ctx.font = 'bold 98px "Microsoft YaHei", sans-serif';
+    ctx.fillText('悬挂附件安装处', 512, 115);
+  });
+  printPlane(hookTex, 'rear_accessory_molded_text', 4.85, 0.76,
+    BACK - 0.10, 7.29, 0, true);
+
+  return group;
+}
+
+// 空气检测仪 — 按用户提供的 UNI-T UT334G 正反面实拍程序化建模。
+// 单位 cm，正面 +X，竖直 +Y，正面画面水平向右为 -Z。
+// 尺寸为照片比例估算：机身约 18.5 × 8.4 × 4.5 cm，顶部采气嘴另计。
+function buildAirDetector(THREE) {
+  const group = new THREE.Group();
+  group.name = 'air_detector_ut334g';
+  const FRONT = 2.18, REAR = -2.18;
+  function material(name, color, roughness = 0.7, metalness = 0) {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    mat.name = name;
+    return mat;
+  }
+  const rubber = material('detector_black_rubber', 0x181b1e, 0.86);
+  const caseMat = material('detector_case_black', 0x24272b, 0.69);
+  const seamMat = material('detector_recess_black', 0x090c0e, 0.9);
+  const redMat = material('detector_red_grip', 0xb8192d, 0.77);
+  const redRidge = material('detector_red_ribs', 0xcf2337, 0.76);
+  const keyMat = material('detector_gray_keys', 0x707779, 0.82);
+  const white = material('detector_alarm_windows', 0xc8d0d2, 0.37);
+  const steel = material('detector_clip_steel', 0xc5cbce, 0.28, 0.48);
+  steel.emissive.setHex(0x3b4246);
+  steel.emissiveIntensity = 0.35;
+  const metalDark = material('detector_screw_steel', 0x41494b, 0.34, 0.72);
+  const gasketMat = material('nozzle_seal', 0x20272a, 0.82);
+
+  function add(geo, mat, name, x = 0, y = 0, u = 0) {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = name;
+    mesh.position.set(x, y, -u);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  }
+  function polygon(points) {
+    const shape = new THREE.Shape();
+    points.forEach(([u, y], i) => i ? shape.lineTo(u, y) : shape.moveTo(u, y));
+    shape.closePath();
+    return shape;
+  }
+  function rounded(w, h, r) {
+    const s = new THREE.Shape();
+    s.moveTo(-w / 2 + r, -h / 2);
+    s.lineTo(w / 2 - r, -h / 2);
+    s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+    s.lineTo(w / 2, h / 2 - r);
+    s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+    s.lineTo(-w / 2 + r, h / 2);
+    s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+    s.lineTo(-w / 2, -h / 2 + r);
+    s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+    return s;
+  }
+  function slab(shape, depth, bevel, mat, name, x, y = 0, u = 0) {
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth, bevelEnabled: bevel > 0, bevelThickness: bevel,
+      bevelSize: bevel, bevelSegments: 3, curveSegments: 16,
+    });
+    geo.translate(0, 0, -depth / 2);
+    geo.rotateY(Math.PI / 2);
+    return add(geo, mat, name, x, y, u);
+  }
+  function cylX(r, depth, mat, name, x, y, u, segments = 32) {
+    const geo = new THREE.CylinderGeometry(r, r, depth, segments);
+    geo.rotateZ(-Math.PI / 2);
+    return add(geo, mat, name, x, y, u);
+  }
+  function cylY(top, bottom, height, mat, name, x, y, u = 0) {
+    return add(new THREE.CylinderGeometry(top, bottom, height, 64), mat, name, x, y, u);
+  }
+  function texture(name, w, h, draw) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    draw(canvas.getContext('2d'), w, h);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.name = name;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }
+  function decal(tex, name, w, h, x, y, u = 0, back = false) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: tex, transparent: true, opacity: 0.999,
+      depthWrite: false, roughness: 0.7,
+    });
+    mat.name = name + '_ink';
+    const geo = new THREE.PlaneGeometry(w, h);
+    geo.rotateY(back ? -Math.PI / 2 : Math.PI / 2);
+    const mesh = add(geo, mat, name, x, y, u);
+    mesh.castShadow = false;
+    mesh.renderOrder = 2;
+    return mesh;
+  }
+
+  // Narrow red center grip, wide angular black head and foot.
+  const silhouette = [
+    [-3.57, 9.02], [-4.02, 8.50], [-4.15, 7.68], [-4.15, 3.62],
+    [-3.52, 2.40], [-3.40, -5.33], [-4.12, -6.50], [-4.12, -8.50],
+    [-3.67, -9.08], [3.67, -9.08], [4.12, -8.50], [4.12, -6.50],
+    [3.40, -5.33], [3.52, 2.40], [4.15, 3.62], [4.15, 7.68],
+    [4.02, 8.50], [3.57, 9.02],
+  ];
+  slab(rounded(7.93, 17.62, 0.55), 3.64, 0.16, redMat,
+    'red_central_protective_boot', 0);
+  slab(polygon(silhouette), 4.05, 0.13, rubber, 'black_angular_housing', 0);
+  const inset = silhouette.map(([u, y]) => [u * 0.964, y * 0.977]);
+  slab(polygon(inset), 0.10, 0.045, caseMat, 'front_case_panel', FRONT - 0.055);
+  slab(polygon(inset), 0.10, 0.045, caseMat, 'rear_case_panel', REAR + 0.055);
+  // Fine seam follows the housing across both sidewalls.
+  [-1, 1].forEach(side => {
+    const sideStrip = add(new THREE.BoxGeometry(0.09, 7.55, 0.055), seamMat,
+      'side_case_joint_' + side, 0, -1.43, side * 3.55);
+    const gripShape = polygon([
+      [-0.18, 2.78], [-0.68, 2.38], [-0.68, -4.58], [-0.18, -5.12],
+      [0.18, -5.12], [0.68, -4.58], [0.68, 2.38], [0.18, 2.78],
+    ]);
+    // Side grip strips wrap around the shell; diagonal ribs form visible red teeth.
+    const grip = slab(gripShape, 0.21, 0.05, redMat,
+      'side_red_grip_' + side, 0, -1.03, side * 3.82);
+    grip.rotation.y = Math.PI / 2;
+    for (let i = 0; i < 7; i++) {
+      const y = -4.65 + i * 1.04;
+      const rib = add(new THREE.BoxGeometry(4.10, 0.19, 0.30), redRidge,
+        'diagonal_grip_rib_' + side + '_' + i, 0, y, side * 3.91);
+      rib.rotation.z = (i < 3 ? 1 : -1) * 0.26;
+    }
+  });
+
+  // Wide upper display with clipped bottom corners and a dark glass window.
+  const displayOutline = [
+    [-3.24, 2.86], [-2.55, 2.24], [2.55, 2.24], [3.24, 2.86],
+    [3.24, 7.54], [3.07, 7.74], [-3.07, 7.74], [-3.24, 7.54],
+  ];
+  slab(polygon(displayOutline), 0.10, 0.06, seamMat,
+    'display_recess', FRONT + 0.015);
+  slab(polygon(displayOutline.map(([u, y]) => [u * 0.972, (y - 5) * 0.972 + 5])),
+    0.08, 0.025, rubber, 'display_front_bezel', FRONT + 0.10);
+  const screenTex = texture('detector_screen_off', 1024, 1024, (ctx, w, h) => {
+    const gradient = ctx.createLinearGradient(0, 0, w * 0.15, h);
+    gradient.addColorStop(0, '#1e2935');
+    gradient.addColorStop(0.34, '#303d4d');
+    gradient.addColorStop(0.57, '#26323f');
+    gradient.addColorStop(0.72, '#35414d');
+    gradient.addColorStop(1, '#202d3a');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+    const gleam = ctx.createLinearGradient(0, 0, w, h * 0.65);
+    gleam.addColorStop(0, 'rgba(215,225,230,0)');
+    gleam.addColorStop(0.48, 'rgba(215,225,230,0.045)');
+    gleam.addColorStop(1, 'rgba(215,225,230,0)');
+    ctx.fillStyle = gleam; ctx.fillRect(0, 0, w, h);
+  });
+  const screenMat = material('detector_lcd_glass', 0xffffff, 0.27);
+  screenMat.map = screenTex;
+  slab(rounded(5.25, 4.15, 0.07), 0.035, 0.012, screenMat,
+    'blank_lcd', FRONT + 0.162, 5.21);
+  const brandTex = texture('uni_t_ut334g_brand', 1536, 220, ctx => {
+    ctx.fillStyle = '#c3293c'; ctx.fillRect(24, 24, 615, 170);
+    ctx.fillStyle = '#e8ecec'; ctx.font = 'bold 145px Arial';
+    ctx.fillText('UNI-T', 45, 165);
+    ctx.font = '67px Arial'; ctx.textAlign = 'right';
+    ctx.fillText('UT334G', 1500, 162);
+  });
+  decal(brandTex, 'front_brand_print', 5.35, 0.77, FRONT + 0.171, 2.73);
+
+  // White windows at the top and at all four corners of the keypad.
+  slab(polygon([[-1.78, 0.23], [1.78, 0.23], [1.35, -0.23], [-1.35, -0.23]]),
+    0.06, 0.045, white, 'top_alarm_light_window', FRONT + 0.07, 8.16);
+  for (const side of [-1, 1]) {
+    for (const upper of [true, false]) {
+      const triangle = upper
+        ? [[-0.42, 0.28], [0.42, 0.28], [side * 0.42, -0.34]]
+        : [[-0.42, -0.28], [0.42, -0.28], [side * 0.42, 0.34]];
+      slab(polygon(triangle), 0.06, 0.045, white,
+        'keypad_corner_window_' + side + '_' + upper,
+        FRONT + 0.045, upper ? 2.30 : -3.17, side * 2.91);
+    }
+  }
+
+  // Grey keys: fan / power / return, and a hexagonal OK navigation cluster.
+  function button(points, name, u, y) {
+    slab(polygon(points.map(([a, b]) => [a * 1.09, b * 1.09])),
+      0.08, 0.035, seamMat, name + '_well', FRONT + 0.03, y, u);
+    slab(polygon(points), 0.15, 0.04, keyMat, name,
+      FRONT + 0.12, y, u);
+  }
+  const powerShape = [[-1.05, -0.44], [1.05, -0.44], [1.05, 0.44], [-1.05, 0.44]];
+  button(powerShape, 'power_key', 0, 1.45);
+  button([[-0.45, -0.44], [0.45, -0.44], [0.45, 0.44], [-0.45, 0.20]], 'fan_key', -1.85, 1.45);
+  button([[-0.45, -0.44], [0.45, -0.20], [0.45, 0.44], [-0.45, 0.44]], 'return_key', 1.85, 1.45);
+  const navY = -0.80;
+  button([[-1.00, -0.56], [0, -1.08], [1.00, -0.56], [1.00, 0.56], [0, 1.08], [-1.00, 0.56]],
+    'ok_hexagonal_key', 0, navY);
+  button([[-0.45, -0.44], [0.45, -0.12], [0.45, 0.61], [-0.45, 0.31]], 'up_key', -1.68, navY + 0.65);
+  button([[-0.45, -0.31], [0.45, -0.61], [0.45, 0.12], [-0.45, 0.44]], 'left_key', -1.68, navY - 0.65);
+  button([[-0.45, -0.12], [0.45, -0.44], [0.45, 0.31], [-0.45, 0.61]], 'right_key', 1.68, navY + 0.65);
+  button([[-0.45, -0.61], [0.45, -0.31], [0.45, 0.44], [-0.45, 0.12]], 'down_key', 1.68, navY - 0.65);
+  const keysTex = texture('detector_key_symbols', 1200, 1200, (ctx, w, h) => {
+    const px = u => (u + 3) / 6 * w;
+    const py = y => (2.25 - y) / 5 * h;
+    ctx.fillStyle = '#414b4f'; ctx.strokeStyle = '#414b4f';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const text = (label, u, y, size) => {
+      ctx.font = `${size}px Arial, sans-serif`; ctx.fillText(label, px(u), py(y));
+    };
+    text('OK', 0, navY, 87);
+    text('▲', -1.68, navY + 0.65, 69);
+    text('◀', -1.68, navY - 0.65, 69);
+    text('▶', 1.68, navY + 0.65, 69);
+    text('▼', 1.68, navY - 0.65, 69);
+    text('↶', 1.85, 1.45, 110);
+    // Pump/fan symbol.
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI * 2 / 3;
+      ctx.beginPath(); ctx.ellipse(px(-1.85) + Math.cos(a) * 24, py(1.45) + Math.sin(a) * 24,
+        27, 19, a, 0, Math.PI * 2); ctx.lineWidth = 6; ctx.stroke();
+    }
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.arc(px(0), py(1.45), 51, -Math.PI * 0.36, Math.PI * 1.36); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px(0), py(1.45) - 64); ctx.lineTo(px(0), py(1.45) + 4); ctx.stroke();
+  });
+  decal(keysTex, 'keypad_symbol_print', 6, 5, FRONT + 0.238, -0.25);
+
+  // Large plain inset at the foot of the front panel.
+  const lowerPanel = [[-3.12, -4.22], [-2.48, -3.66], [2.48, -3.66], [3.12, -4.22],
+    [3.12, -5.94], [2.84, -6.52], [3.10, -7.94], [-3.10, -7.94], [-2.84, -6.52], [-3.12, -5.94]];
+  slab(polygon(lowerPanel.map(([u, y]) => [u * 1.015, (y + 5) * 1.015 - 5])),
+    0.06, 0.025, seamMat, 'lower_front_panel_seam', FRONT + 0.005);
+  slab(polygon(lowerPanel), 0.065, 0.035, rubber, 'lower_front_blank_panel', FRONT + 0.06);
+  slab(polygon([[-1.23, 0.20], [1.23, 0.20], [0.95, -0.20], [-0.95, -0.20]]),
+    0.17, 0.045, caseMat, 'bottom_front_latch', FRONT + 0.13, -8.55);
+
+  // Top sampling nozzle: tapered black socket, seal, clear filter collar and tip.
+  cylY(1.02, 1.25, 1.04, rubber, 'sampling_nozzle_base', 0, 9.42);
+  cylY(0.81, 1.02, 0.71, caseMat, 'sampling_nozzle_neck', 0, 10.21);
+  cylY(0.88, 0.88, 0.10, gasketMat, 'sampling_nozzle_gasket', 0, 10.60);
+  const clearMat = new THREE.MeshPhysicalMaterial({
+    color: 0xe3e9ed, transparent: true, opacity: 0.40, roughness: 0.19,
+    metalness: 0, clearcoat: 0.8, depthWrite: false, side: THREE.DoubleSide,
+  });
+  clearMat.name = 'clear_sampling_filter_plastic';
+  cylY(0.90, 0.90, 0.63, clearMat, 'transparent_filter_collar', 0, 10.93);
+  for (const y of [10.66, 10.82, 11.06, 11.21]) {
+    cylY(0.93, 0.93, 0.055, clearMat, 'filter_collar_rib_' + y, 0, y);
+  }
+  cylY(0.56, 0.61, 0.44, white, 'filter_inner_core', 0, 10.91);
+  cylY(0.26, 0.42, 0.42, clearMat, 'sampling_inlet_tip', 0, 11.43);
+  cylY(0.12, 0.12, 0.018, gasketMat, 'sampling_inlet_opening', 0, 11.65);
+
+  // Rear upper battery molding, recessed screws and round buzzer perforations.
+  slab(polygon([[-3.24, 3.03], [-2.85, 2.58], [2.85, 2.58], [3.24, 3.03],
+    [3.24, 7.92], [2.98, 8.15], [-2.98, 8.15], [-3.24, 7.92]]),
+    0.12, 0.055, caseMat, 'rear_upper_molding', REAR - 0.07);
+  for (const y of [-7.70, 7.65]) {
+    for (const u of [-3.16, 3.16]) {
+      cylX(0.27, 0.035, seamMat, 'rear_screw_recess_' + y + '_' + u,
+        REAR - 0.14, y, u);
+      if (y < 0) {
+        cylX(0.15, 0.04, metalDark, 'rear_screw_' + u, REAR - 0.17, y, u);
+        for (const angle of [0, Math.PI / 2]) {
+          const slot = add(new THREE.BoxGeometry(0.015, 0.035, 0.22), seamMat,
+            'rear_screw_slot_' + u + '_' + angle, REAR - 0.197, y, u);
+          slot.rotation.x = angle;
+        }
+      }
+    }
+  }
+  for (let row = -4; row <= 4; row++) {
+    for (let col = -4; col <= 4; col++) {
+      if (row * row + col * col > 19) continue;
+      cylX(0.052, 0.02, seamMat, 'buzzer_hole_' + row + '_' + col,
+        REAR - 0.055, -6.18 + row * 0.285, col * 0.285, 12);
+    }
+  }
+
+  // Product plate and a separate non-scannable identification graphic.
+  const labelTex = texture('ut334g_rear_product_plate', 1440, 820, (ctx, w, h) => {
+    ctx.fillStyle = '#e5e7e5'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#26303c'; ctx.textBaseline = 'middle';
+    const labels = [
+      '产品名称：泵吸式四合一气体检测仪', '产品型号：UT334G',
+      '检测气体：可燃气体、硫化氢、一氧化碳、氧气',
+      '防爆型号：CNEx21.5787X', '防爆标志：Ex ib ⅡB T3 Gb',
+    ];
+    labels.forEach((label, i) => {
+      ctx.font = `${i === 0 ? 59 : 53}px "Microsoft YaHei", Arial, sans-serif`;
+      ctx.fillText(label, 65, 130 + i * 140);
+    });
+  });
+  slab(rounded(5.25, 2.90, 0.25), 0.04, 0.02, white,
+    'rear_product_plate', REAR - 0.045, -2.16);
+  decal(labelTex, 'rear_product_plate_print', 5.1, 2.76, REAR - 0.091, -2.16, 0, true);
+  const idTex = texture('rear_identification_graphic', 320, 320, (ctx, w, h) => {
+    ctx.fillStyle = '#e9ebe6'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#26313c';
+    // Decorative grid only; no reference-image serial number or scannable QR payload.
+    for (let r = 0; r < 17; r++) for (let c = 0; c < 17; c++) {
+      if ((r * 11 + c * 7 + r * c) % 9 < 4) ctx.fillRect(35 + c * 14, 20 + r * 14, 12, 12);
+    }
+    ctx.font = '22px Arial'; ctx.textAlign = 'center'; ctx.fillText('UT334G', 160, 294);
+  });
+  decal(idTex, 'rear_identification_label', 1.28, 1.28, REAR - 0.09, 0.05, 0, true);
+
+  // Polished spring clip and D-shaped suspension ring on the upper back.
+  slab(rounded(2.50, 3.04, 0.39), 0.14, 0.09, steel,
+    'rear_belt_clip', REAR - 0.52, 4.62);
+  slab(rounded(2.09, 2.58, 0.23), 0.025, 0.025, steel,
+    'belt_clip_center_face', REAR - 0.70, 4.62);
+  const hinge = add(new THREE.CylinderGeometry(0.16, 0.16, 2.77, 32), steel,
+    'belt_clip_hinge', REAR - 0.48, 6.18, 0);
+  hinge.rotation.x = Math.PI / 2;
+  const ringPath = new THREE.CurvePath();
+  ringPath.add(new THREE.LineCurve3(new THREE.Vector3(REAR - 0.43, 6.13, -1.28),
+    new THREE.Vector3(REAR - 0.43, 6.13, 1.28)));
+  // Smooth upper D arch, with short vertical sides meeting the hinge.
+  const ringPoints = [];
+  for (let i = 0; i <= 48; i++) {
+    const a = i * Math.PI / 48;
+    ringPoints.push(new THREE.Vector3(REAR - 0.43, 6.13 + 1.72 * Math.sin(a), 1.28 * Math.cos(a)));
+  }
+  for (let i = 1; i < ringPoints.length; i++) {
+    ringPath.add(new THREE.LineCurve3(ringPoints[i - 1], ringPoints[i]));
+  }
+  add(new THREE.TubeGeometry(ringPath, 100, 0.095, 10, true), steel, 'rear_suspension_D_ring');
+
+  // Bottom service opening and protective flap.
+  add(new THREE.BoxGeometry(1.10, 0.12, 2.38), seamMat,
+    'bottom_service_port_recess', -0.3, -9.12, 0);
+  add(new THREE.BoxGeometry(1.20, 0.22, 2.61), rubber,
+    'bottom_service_port_cover', -0.3, -9.25, 0);
+  return group;
+}
+
+// 幼儿园墙挂相框：深棕木构、暖橙细线、米白卡纸和自然绿叶。
+// 单位 cm；正面朝 +X，水平向右为 -Z；外框约 88 × 64 × 4.2 cm。
+function buildKindergartenFrame(THREE) {
+  const group = new THREE.Group();
+  group.name = 'kindergarten_wall_picture_frame';
+  const W = 88, H = 64, BORDER = 5.2;
+  const photoW = 70, photoH = 46;
+
+  function mat(name, color, roughness = 0.75, metalness = 0) {
+    const m = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    m.name = name;
+    return m;
+  }
+  function canvasTex(name, w, h, draw) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d'), w, h);
+    const tex = new THREE.CanvasTexture(c);
+    tex.name = name;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }
+  const timber = mat('frame_warm_walnut', 0xffffff, 0.78);
+  timber.map = canvasTex('walnut_long_grain', 1024, 256, (ctx, w, h) => {
+    const fill = ctx.createLinearGradient(0, 0, 0, h);
+    fill.addColorStop(0, '#52301f'); fill.addColorStop(0.35, '#69412a');
+    fill.addColorStop(0.7, '#5c3824'); fill.addColorStop(1, '#492b1d');
+    ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 116; i++) {
+      const y = i * h / 116;
+      ctx.strokeStyle = i % 3 ? 'rgba(30,15,8,0.16)' : 'rgba(220,160,96,0.12)';
+      ctx.lineWidth = i % 7 === 0 ? 2.1 : 0.7;
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 16) {
+        const dy = Math.sin(x * 0.008 + i * 0.79) * (1.6 + i % 3)
+          + Math.sin(x * 0.021 + i) * 0.6;
+        if (!x) ctx.moveTo(x, y + dy); else ctx.lineTo(x, y + dy);
+      }
+      ctx.stroke();
+    }
+  });
+  const orange = mat('frame_honey_orange_trim', 0xc48a42, 0.72);
+  const cream = mat('frame_warm_cream_matboard', 0xeee5cf, 0.94);
+  const backing = mat('frame_backing_board', 0x796147, 0.98);
+  const edge = mat('frame_rear_walnut_edge', 0x3b281d, 0.85);
+  const metal = mat('frame_hanging_hardware', 0x747c78, 0.45, 0.55);
+  const screwMat = mat('frame_screw_dark', 0x333933, 0.58, 0.45);
+  const leafMat = mat('frame_leaf_sage', 0x71945b, 0.83);
+  const leafLight = mat('frame_leaf_olive', 0x94a766, 0.85);
+  const stemMat = mat('frame_leaf_stem', 0x4d6540, 0.88);
+
+  function add(geo, material, name, x = 0, y = 0, u = 0) {
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.name = name;
+    mesh.position.set(x, y, -u);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  }
+  function poly(points) {
+    const s = new THREE.Shape();
+    points.forEach(([u, y], i) => i ? s.lineTo(u, y) : s.moveTo(u, y));
+    s.closePath();
+    return s;
+  }
+  function rectangle(w, h) {
+    return poly([[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]]);
+  }
+  function frameShape(w, h, iw, ih) {
+    const shape = rectangle(w, h);
+    const hole = new THREE.Path();
+    hole.moveTo(-iw / 2, -ih / 2);
+    hole.lineTo(-iw / 2, ih / 2);
+    hole.lineTo(iw / 2, ih / 2);
+    hole.lineTo(iw / 2, -ih / 2);
+    hole.closePath();
+    shape.holes.push(hole);
+    return shape;
+  }
+  function extrude(shape, depth, bevel, material, name, x = 0) {
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth, bevelEnabled: bevel > 0, bevelThickness: bevel,
+      bevelSize: bevel, bevelSegments: 3, curveSegments: 16,
+    });
+    geo.translate(0, 0, -depth / 2);
+    geo.rotateY(Math.PI / 2);
+    return add(geo, material, name, x);
+  }
+
+  // Four real mitered wooden rails with grain running along each board.
+  const hw = W / 2, hh = H / 2, iw = hw - BORDER, ih = hh - BORDER;
+  const rails = [
+    { name: 'wood_rail_top', vertical: false,
+      points: [[-hw, hh], [-iw, ih], [iw, ih], [hw, hh]] },
+    { name: 'wood_rail_bottom', vertical: false,
+      points: [[-hw, -hh], [hw, -hh], [iw, -ih], [-iw, -ih]] },
+    { name: 'wood_rail_left', vertical: true,
+      points: [[-hw, -hh], [-iw, -ih], [-iw, ih], [-hw, hh]] },
+    { name: 'wood_rail_right', vertical: true,
+      points: [[hw, -hh], [hw, hh], [iw, ih], [iw, -ih]] },
+  ];
+  for (const rail of rails) {
+    const mesh = extrude(poly(rail.points), 3.6, 0.14, timber, rail.name);
+    const pos = mesh.geometry.attributes.position;
+    const uv = mesh.geometry.attributes.uv;
+    const minU = Math.min(...rail.points.map(p => p[0]));
+    const minY = Math.min(...rail.points.map(p => p[1]));
+    for (let i = 0; i < pos.count; i++) {
+      const u = -pos.getZ(i), y = pos.getY(i);
+      uv.setXY(i, rail.vertical ? (y + hh) / H : (u + hw) / W,
+        rail.vertical ? (u - minU) / BORDER : (y - minY) / BORDER);
+    }
+    uv.needsUpdate = true;
+  }
+
+  extrude(frameShape(87.5, 63.5, 75.5, 51.5), 0.50, 0.06,
+    edge, 'rear_structural_frame', -1.85);
+  extrude(rectangle(77.1, 53.1), 0.42, 0.03,
+    backing, 'removable_rear_backing', -1.53);
+  extrude(frameShape(78.15, 54.15, 76.25, 52.25), 0.30, 0.055,
+    orange, 'honey_orange_inner_bead', 1.60);
+  extrude(frameShape(76.3, 52.3, 69.5, 45.5), 0.32, 0.045,
+    cream, 'cream_photo_matboard', 1.32);
+
+  // A replaceable, separately named photo insert. No real children's photographs.
+  // 独立节点和材质均命名为“照片”，可在 Unity 中替换材质或贴图。
+  const insertTex = canvasTex('nature_garden_placeholder', 1680, 1104, (ctx, w, h) => {
+    ctx.fillStyle = '#eee9d9'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#e5ddc6';
+    ctx.beginPath(); ctx.arc(w * 0.78, h * 0.26, 123, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#b4c19a';
+    ctx.beginPath(); ctx.moveTo(0, h * 0.83);
+    ctx.bezierCurveTo(w * 0.23, h * 0.59, w * 0.48, h * 1.02, w, h * 0.69);
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#849769';
+    ctx.beginPath(); ctx.moveTo(0, h * 0.91);
+    ctx.bezierCurveTo(w * 0.33, h * 1.04, w * 0.71, h * 0.72, w, h * 0.89);
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#b4b695'; ctx.lineWidth = 2;
+    ctx.strokeRect(56, 56, w - 112, h - 112);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#5f7050'; ctx.font = '40px Georgia, serif';
+    ctx.fillText('N A T U R E   E X P L O R E R S', w / 2, h * 0.34);
+    ctx.fillStyle = '#5b4937';
+    ctx.font = '86px "Microsoft YaHei", "PingFang SC", sans-serif';
+    ctx.fillText('我们的自然发现', w / 2, h * 0.49);
+    ctx.fillStyle = '#7b7b63';
+    ctx.font = '33px "Microsoft YaHei", sans-serif';
+    ctx.fillText('观察 · 探索 · 快乐成长', w / 2, h * 0.61);
+    // Simple botanical accents belong to the sample insert, not the frame opening.
+    ctx.strokeStyle = '#72825a'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(154, h - 183); ctx.quadraticCurveTo(212, h - 267, 179, h - 367); ctx.stroke();
+    ctx.fillStyle = '#8a9d70';
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath(); ctx.ellipse(180 + (i % 2 ? 22 : -12), h - 223 - i * 32,
+        28, 12, i % 2 ? -0.62 : 0.62, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  const insertMat = mat('照片', 0xffffff, 0.94);
+  insertMat.map = insertTex;
+  const photoGeo = new THREE.PlaneGeometry(photoW, photoH);
+  photoGeo.rotateY(Math.PI / 2);
+  const photo = add(photoGeo, insertMat, '照片', 1.16);
+  photo.castShadow = false;
+  photo.userData.photoWidthCm = photoW;
+  photo.userData.photoHeightCm = photoH;
+
+  // Restrained raised botanical detail at one corner ties into the garden setting.
+  function leaf(u, y, angle, length, material, name) {
+    const s = new THREE.Shape();
+    s.moveTo(0, -length / 2);
+    s.bezierCurveTo(length * 0.47, -length * 0.22, length * 0.38, length * 0.28, 0, length / 2);
+    s.bezierCurveTo(-length * 0.38, length * 0.28, -length * 0.47, -length * 0.22, 0, -length / 2);
+    const mesh = extrude(s, 0.16, 0.055, material, name, 2.02);
+    mesh.position.y = y; mesh.position.z = -u;
+    mesh.rotation.x = -angle;
+    return mesh;
+  }
+  const stemPath = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(2.02, -29.4, 40.5),
+    new THREE.Vector3(2.02, -26.4, 40.8),
+    new THREE.Vector3(2.02, -23.3, 41.0),
+    new THREE.Vector3(2.02, -20.1, 40.3),
+  ]);
+  add(new THREE.TubeGeometry(stemPath, 20, 0.10, 6, false), stemMat, 'botanical_corner_stem');
+  leaf(-39.8, -27.7, -0.85, 3.5, leafMat, 'corner_leaf_01');
+  leaf(-41.7, -25.0, 0.85, 3.3, leafLight, 'corner_leaf_02');
+  leaf(-39.6, -22.8, -0.9, 3.2, leafMat, 'corner_leaf_03');
+  leaf(-40.4, -20.4, 0.28, 2.9, leafLight, 'corner_leaf_04');
+
+  // Backside turn tabs, screws and two D-ring hanging mounts.
+  for (const [u, y] of [[-34, 0], [34, 0], [-20, 24.9], [20, 24.9], [-20, -24.9], [20, -24.9]]) {
+    add(new THREE.BoxGeometry(0.14, 0.85, 2.35), metal,
+      'backing_turn_tab_' + u + '_' + y, -1.86, y, u);
+    const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.10, 20), screwMat);
+    screw.rotation.z = -Math.PI / 2;
+    screw.name = 'turn_tab_screw_' + u + '_' + y;
+    screw.position.set(-1.99, y, -u);
+    group.add(screw);
+  }
+  for (const u of [-27, 27]) {
+    add(new THREE.BoxGeometry(0.18, 2.65, 1.45), metal,
+      'wall_hanger_plate_' + u, -2.18, 19.9, u);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.87, 0.12, 8, 28), metal);
+    ring.name = 'wall_hanging_ring_' + u;
+    ring.rotation.y = Math.PI / 2;
+    ring.scale.y = 1.2;
+    ring.position.set(-2.39, 21.5, -u);
+    group.add(ring);
+  }
+  group.userData.dimensionsCm = { width: W, height: H, depth: 4.4 };
+  group.userData.usage = 'wall-mounted landscape display frame';
+  return group;
+}
+
+// hikvision-column-speaker.js — 海康威视网络音柱程序化模型
+// 参考实拍与官方网络音柱外形尺寸：约 446.8(H) × 160(W) × 160(D) mm。
+// 单位：厘米(cm)。朝向：黑色网罩朝 +X，左右为 ±Z，安装背板位于 -X。
+function buildHikvisionColumnSpeaker(THREE) {
+  const group = new THREE.Group();
+  group.name = 'hikvision_column_speaker';
+
+  const H = 44.68;
+  const W = 16;
+  const D = 16;
+  const capH = 1.05;
+  const halfW = 7.15;
+
+  // Shared horizontal profile: the end caps follow the grille, including its
+  // curved return to the white side panels. Dimensions are in the X/Z plane.
+  function grilleX(z) {
+    const q = Math.min(1, Math.abs(z) / halfW);
+    return 4.75 + 3.05 * Math.pow(1 - q * q, 0.72);
+  }
+
+  // ---------- materials ----------
+  const matWhite = new THREE.MeshPhysicalMaterial({
+    color: 0xf3f4f2, roughness: 0.38, metalness: 0.02,
+    clearcoat: 0.22, clearcoatRoughness: 0.45,
+  });
+  matWhite.name = 'speaker_shell_white';
+
+  const matWhiteEdge = new THREE.MeshStandardMaterial({ color: 0xe3e5e2, roughness: 0.48 });
+  matWhiteEdge.name = 'speaker_shell_seam';
+  const matBaffle = new THREE.MeshStandardMaterial({ color: 0x111315, roughness: 0.92 });
+  matBaffle.name = 'speaker_baffle_black';
+  const matCone = new THREE.MeshStandardMaterial({ color: 0x24282c, roughness: 0.9 });
+  matCone.name = 'speaker_cone';
+  const matSurround = new THREE.MeshStandardMaterial({ color: 0x0c0d0e, roughness: 0.82 });
+  matSurround.name = 'speaker_surround';
+  const matDust = new THREE.MeshStandardMaterial({ color: 0x171a1d, roughness: 0.72 });
+  matDust.name = 'speaker_dust_cap';
+  const matMetal = new THREE.MeshStandardMaterial({ color: 0x9ba0a3, roughness: 0.3, metalness: 0.78 });
+  matMetal.name = 'mounting_hardware';
+  const matDarkMetal = new THREE.MeshStandardMaterial({ color: 0x33373a, roughness: 0.48, metalness: 0.5 });
+  matDarkMetal.name = 'mounting_slot';
+  const matLed = new THREE.MeshStandardMaterial({
+    color: 0x70f0a5, emissive: 0x35e77d, emissiveIntensity: 1.8, roughness: 0.25,
+  });
+  matLed.name = 'status_led_green';
+
+  // ---------- helpers ----------
+  function rrShape(w, h, r) {
+    const s = new THREE.Shape();
+    const x = -w / 2, y = -h / 2;
+    s.moveTo(x + r, y);
+    s.lineTo(x + w - r, y);
+    s.quadraticCurveTo(x + w, y, x + w, y + r);
+    s.lineTo(x + w, y + h - r);
+    s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    s.lineTo(x + r, y + h);
+    s.quadraticCurveTo(x, y + h, x, y + h - r);
+    s.lineTo(x, y + r);
+    s.quadraticCurveTo(x, y, x + r, y);
+    return s;
+  }
+
+  function slabX(w, h, r, depth, mat, name, x, y, z, bevel = 0.22) {
+    const geo = new THREE.ExtrudeGeometry(rrShape(w, h, r), {
+      depth,
+      bevelEnabled: bevel > 0,
+      bevelThickness: bevel,
+      bevelSize: bevel,
+      bevelSegments: 4,
+      curveSegments: 12,
+    });
+    geo.translate(0, 0, -depth / 2);
+    geo.rotateY(Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = name;
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  }
+
+  function cylX(rTop, rBottom, length, mat, name, x, y, z, seg = 40) {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, length, seg), mat);
+    mesh.name = name;
+    mesh.rotation.z = -Math.PI / 2;
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    group.add(mesh);
+    return mesh;
+  }
+
+  function markShell(mesh) {
+    mesh.userData.shell = true;
+    return mesh;
+  }
+
+  // Dense honeycomb-like grille texture. A real hole is represented by a dark core
+  // plus a small metallic highlight; the slightly transparent grille reveals the drivers.
+  function makeGrilleTexture() {
+    const c = document.createElement('canvas');
+    c.width = 768;
+    c.height = 1536;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#17191b';
+    ctx.fillRect(0, 0, c.width, c.height);
+    const step = 10;
+    for (let row = -1; row < c.height / step + 1; row++) {
+      const yy = row * step;
+      const off = (row & 1) ? step / 2 : 0;
+      for (let xx = -step; xx < c.width + step; xx += step) {
+        const x = xx + off;
+        ctx.fillStyle = '#44484b';
+        ctx.beginPath();
+        ctx.arc(x - 0.7, yy - 0.7, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#050607';
+        ctx.beginPath();
+        ctx.arc(x, yy, 2.75, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.name = 'speaker_grille_holes';
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }
+
+  function makeLogoTexture() {
+    const c = document.createElement('canvas');
+    c.width = 768;
+    c.height = 192;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#25282a';
+    const r = 34;
+    ctx.beginPath();
+    ctx.moveTo(r, 12);
+    ctx.lineTo(c.width - r, 12);
+    ctx.quadraticCurveTo(c.width - 10, 12, c.width - 10, r);
+    ctx.lineTo(c.width - 10, c.height - r);
+    ctx.quadraticCurveTo(c.width - 10, c.height - 12, c.width - r, c.height - 12);
+    ctx.lineTo(r, c.height - 12);
+    ctx.quadraticCurveTo(10, c.height - 12, 10, c.height - r);
+    ctx.lineTo(10, r);
+    ctx.quadraticCurveTo(10, 12, r, 12);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(c.width / 2, c.height / 2 + 5);
+    ctx.transform(1, 0, -0.16, 1, 0, 0);
+    ctx.fillStyle = '#f0f1ef';
+    ctx.font = 'bold 96px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('HIKVISION', 0, 0);
+    ctx.restore();
+    const tex = new THREE.CanvasTexture(c);
+    tex.name = 'hikvision_badge';
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+  }
+
+  function makeInfoTexture() {
+    const c = document.createElement('canvas');
+    c.width = 640;
+    c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#f1f1ee';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#4f5354';
+    ctx.font = 'bold 34px Arial, sans-serif';
+    ctx.fillText('HIKVISION', 34, 55);
+    ctx.font = '24px Arial, sans-serif';
+    ctx.fillText('NETWORK COLUMN SPEAKER', 34, 98);
+    ctx.font = '20px Arial, sans-serif';
+    ctx.fillText('100–240 V~   50/60 Hz', 34, 140);
+    ctx.strokeStyle = '#777b7d';
+    ctx.strokeRect(32, 165, 220, 54);
+    for (let i = 0; i < 18; i++) {
+      const x = 290 + i * 14;
+      ctx.fillRect(x, 168, (i % 3) + 2, 50);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.name = 'speaker_product_label';
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  // ---------- enclosure ----------
+  // Rear shell stops before the front so the curved grille can wrap outwards.
+  const rearShell = slabX(W - 0.45, H - 2 * capH, 0.12, 12.4, matWhite,
+    'rear_enclosure', -1.78, 0, 0, 0.10);
+  markShell(rearShell);
+
+  // Thin horizontal molded caps, rather than a rounded slab extruded along X.
+  // Shape coordinates are (Z, X); after extrusion they map to (X, Y, Z).
+  // Only a 0.07 cm lip extends past the mesh; the bevel rounds the outer edge.
+  function makeEndCap(name, y) {
+    const lip = 0.07;
+    const side = W / 2 - 0.10;
+    const back = -D / 2 + 0.10;
+    const shape = new THREE.Shape();
+    shape.moveTo(-side + 0.8, back);
+    shape.lineTo(side - 0.8, back);
+    shape.quadraticCurveTo(side, back, side, back + 0.8);
+    shape.lineTo(side, 3.8);
+    shape.quadraticCurveTo(side, 4.55, halfW, grilleX(halfW) + lip);
+    for (let i = 1; i <= 104; i++) {
+      const z = halfW - (2 * halfW * i) / 104;
+      shape.lineTo(z, grilleX(z) + lip);
+    }
+    shape.quadraticCurveTo(-side, 4.55, -side, 3.8);
+    shape.lineTo(-side, back + 0.8);
+    shape.quadraticCurveTo(-side, back, -side + 0.8, back);
+    shape.closePath();
+    const bevel = 0.08;
+    const depth = capH - 2 * bevel;
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth, bevelEnabled: true, bevelThickness: bevel,
+      bevelSize: bevel, bevelSegments: 3, curveSegments: 16,
+    });
+    geo.translate(0, 0, -depth / 2);
+    geo.rotateX(-Math.PI / 2);
+    geo.rotateY(-Math.PI / 2);
+    const cap = new THREE.Mesh(geo, matWhite);
+    cap.name = name;
+    cap.position.y = y;
+    cap.castShadow = true;
+    cap.receiveShadow = true;
+    group.add(cap);
+    return markShell(cap);
+  }
+  makeEndCap('top_cap', H / 2 - capH / 2);
+  makeEndCap('bottom_cap', -H / 2 + capH / 2);
+
+  // ---------- internal baffle and drivers ----------
+  const baffle = new THREE.Mesh(new THREE.BoxGeometry(0.55, 37.0, 13.25), matBaffle);
+  baffle.name = 'internal_baffle';
+  baffle.position.set(4.7, 0, 0);
+  baffle.castShadow = true;
+  group.add(baffle);
+
+  const driverYs = [13.8, 4.6, -4.6, -13.8];
+  driverYs.forEach((y, i) => {
+    cylX(4.0, 4.0, 0.34, matSurround, 'woofer_surround_' + (i + 1), 5.12, y, 0, 56);
+    cylX(1.5, 3.72, 0.62, matCone, 'woofer_cone_' + (i + 1), 5.48, y, 0, 56);
+    const dust = new THREE.Mesh(new THREE.SphereGeometry(1.35, 36, 18), matDust);
+    dust.name = 'woofer_dust_cap_' + (i + 1);
+    dust.scale.set(0.34, 1, 1);
+    dust.position.set(5.92, y, 0);
+    group.add(dust);
+  });
+
+  // ---------- curved perforated grille ----------
+  const grilleTex = makeGrilleTexture();
+  const matGrille = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: grilleTex,
+    roughness: 0.68,
+    metalness: 0.34,
+    transparent: true,
+    opacity: 0.965,
+    side: THREE.DoubleSide,
+  });
+  matGrille.name = 'perforated_metal_grille';
+
+  const cols = 52, rows = 92;
+  const y0 = -H / 2 + capH - 0.03;
+  const y1 = H / 2 - capH + 0.03;
+  const pos = [], uv = [], idx = [];
+  for (let iy = 0; iy <= rows; iy++) {
+    const v = iy / rows;
+    const y = y0 + (y1 - y0) * v;
+    for (let iz = 0; iz <= cols; iz++) {
+      const u = iz / cols;
+      const z = -halfW + halfW * 2 * u;
+      pos.push(grilleX(z), y, z);
+      uv.push(u, v);
+    }
+  }
+  for (let iy = 0; iy < rows; iy++) {
+    for (let iz = 0; iz < cols; iz++) {
+      const a = iy * (cols + 1) + iz;
+      const b = a + 1;
+      const c = a + cols + 2;
+      const d = a + cols + 1;
+      idx.push(a, d, c, a, c, b);
+    }
+  }
+  const grilleGeo = new THREE.BufferGeometry();
+  grilleGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  grilleGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  grilleGeo.setIndex(idx);
+  grilleGeo.computeVertexNormals();
+  const grille = new THREE.Mesh(grilleGeo, matGrille);
+  grille.name = 'curved_front_grille';
+  grille.castShadow = true;
+  grille.renderOrder = 1;
+  group.add(grille);
+  markShell(grille);
+
+  // Raised HIKVISION badge on the lower grille.
+  const badgeBack = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.72, 6.75), matBaffle);
+  badgeBack.name = 'hikvision_badge_back';
+  badgeBack.position.set(grilleX(0) + 0.06, -15.25, 0);
+  group.add(badgeBack);
+  markShell(badgeBack);
+
+  const logoMat = new THREE.MeshBasicMaterial({
+    map: makeLogoTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+  logoMat.name = 'hikvision_logo';
+  const logo = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.6), logoMat);
+  logo.name = 'hikvision_logo_plate';
+  logo.rotation.y = Math.PI / 2;
+  logo.position.set(grilleX(0) + 0.19, -15.25, 0);
+  logo.renderOrder = 3;
+  group.add(logo);
+  markShell(logo);
+
+  // The photographs show the indicator and microphone on the bottom cap face.
+  const status = cylX(0.17, 0.17, 0.10, matLed, 'front_status_led', 3.8, -H / 2 - 0.015, 0, 20);
+  status.rotation.z = 0;
+  markShell(status);
+  const mic = cylX(0.095, 0.095, 0.08, matDarkMetal, 'front_microphone', 3.8, -H / 2 - 0.015, 1.15, 16);
+  mic.rotation.z = 0;
+  markShell(mic);
+
+  // Product label on the lower portion of the rear shell.
+  const infoMat = new THREE.MeshBasicMaterial({ map: makeInfoTexture(), side: THREE.DoubleSide });
+  infoMat.name = 'product_label_print';
+  const info = new THREE.Mesh(new THREE.PlaneGeometry(8.0, 3.2), infoMat);
+  info.name = 'rear_product_label';
+  info.rotation.y = -Math.PI / 2;
+  info.position.set(-8.13, -13.0, 0);
+  group.add(info);
+  markShell(info);
+
+  // ---------- wall-mount bracket ----------
+  const wallPlate = slabX(5.5, 34.8, 1.05, 0.62, matWhite,
+    'wall_mount_plate', -12.05, 0, 0, 0.12);
+  const armYs = [18.2, -18.2];
+  armYs.forEach((y, i) => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(7.5, 1.05, 4.6), matWhite);
+    arm.name = i === 0 ? 'mount_arm_top' : 'mount_arm_bottom';
+    arm.position.set(-8.65, y, 0);
+    arm.castShadow = true;
+    group.add(arm);
+
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 5.0, 28), matMetal);
+    bolt.name = i === 0 ? 'pivot_bolt_top' : 'pivot_bolt_bottom';
+    bolt.rotation.x = Math.PI / 2;
+    bolt.position.set(-5.4, y, 0);
+    group.add(bolt);
+    const washerA = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.16, 32), matMetal);
+    washerA.name = 'pivot_washer_' + (i + 1);
+    washerA.rotation.x = Math.PI / 2;
+    washerA.position.set(-5.4, y, -2.55);
+    group.add(washerA);
+  });
+
+  // Two dark elongated fixing recesses on the wall plate.
+  [10.5, -10.5].forEach((y, i) => {
+    const slot = slabX(1.05, 4.2, 0.5, 0.10, matDarkMetal,
+      'wall_slot_' + (i + 1), -12.39, y, 0, 0);
+    slot.castShadow = false;
+    const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.45, 28), matMetal);
+    screw.name = 'wall_screw_' + (i + 1);
+    screw.rotation.z = -Math.PI / 2;
+    screw.position.set(-12.53, y - (i === 0 ? 1.2 : -1.2), 0);
+    group.add(screw);
+  });
+
+  // Cable gland at the lower rear, as seen in the installation photo.
+  const gland = cylX(0.7, 0.7, 0.9, matWhiteEdge, 'cable_gland', -7.95, -18.3, 4.15, 30);
+  gland.rotation.z = -Math.PI / 2;
+  cylX(0.36, 0.36, 0.96, matDarkMetal, 'cable_gland_core', -8.05, -18.3, 4.15, 24);
 
   return group;
 }
@@ -92873,6 +94138,7 @@ function main() {
     new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.BackSide, depthWrite: false })
   );
   scene.add(backdrop);
+  backdrop.renderOrder = -1;
   backdrop.userData.noExport = true; // 不导出背景球
 
   // ---------- camera + orbit ----------
@@ -92909,6 +94175,7 @@ function main() {
   function applyCamera() {
     camera.position.setFromSpherical(sph).add(target);
     camera.lookAt(target);
+    backdrop.position.copy(camera.position);
   }
 
   let dragging = false, lastX = 0, lastY = 0;
@@ -93005,6 +94272,11 @@ function main() {
     { id: 'multimeter', name: '数字万用表', build: buildMultimeter },
     { id: 'hikmicro-h11', name: 'HM-TPH11 手持热成像仪', build: buildThermalImager },
     { id: 'conquest-rugged-phone', name: '征服 CONQUEST 三防终端', build: buildRuggedPhone },
+    { id: 'multimeter-2', name: '数字万用表2', build: buildMultimeter2 },
+    { id: 'air-detector', name: '空气检测仪', build: buildAirDetector },
+    { id: 'kindergarten-frame', name: '幼儿园墙挂相框', build: buildKindergartenFrame,
+      view: { theta: 1.45, phi: 1.43, fitViewport: true, spin: false } },
+    { id: 'hikvision-column-speaker', name: '海康威视网络音柱', build: buildHikvisionColumnSpeaker },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -93029,6 +94301,13 @@ function main() {
     const rec = MODELS.find(m => m.id === id) || MODELS[0];
     currentId = rec.id;
     currentRec = rec;
+    // 模型作者可以指定初始机位(如相框要正对看)
+    spin = rec.view?.spin !== false;
+    if (rec.view) {
+      sph.theta = rec.view.theta;
+      sph.phi = rec.view.phi;
+      pivot.rotation.set(0, 0, 0);
+    }
     if (currentModel) {
       pivot.remove(currentModel);
       // 导入的模型是常驻对象(切回来还用它),不能销毁几何
@@ -93080,6 +94359,14 @@ function main() {
     pivot.rotation.y = spinSaved;              // 恢复转台(包围盒已经量完)
     pivot.updateMatrixWorld(true);
     sph.radius = THREE.MathUtils.clamp(fit, 11, 5000);
+    // 模型作者要求「整件入画」时(fitViewport),按包围球反推距离:
+    // 扁平板件用包围盒取景会在转角度时出画,按球算是唯一稳妥的解
+    if (rec.view?.fitViewport) {
+      const halfVertical = THREE.MathUtils.degToRad(camera.fov / 2);
+      const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
+      sph.radius = THREE.MathUtils.clamp(
+        sphere.radius * 1.06 / Math.sin(Math.min(halfVertical, halfHorizontal)), 11, 500);
+    }
     // 缩放范围随模型自适应:导入的大件要能退得更远,小件要能凑得更近
     zoomMin = Math.max(2, sphere.radius * 0.55);
     zoomMax = Math.max(300, sphere.radius * 12);

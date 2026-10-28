@@ -38,6 +38,7 @@ function main() {
     new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.BackSide, depthWrite: false })
   );
   scene.add(backdrop);
+  backdrop.renderOrder = -1;
   backdrop.userData.noExport = true; // 不导出背景球
 
   // ---------- camera + orbit ----------
@@ -74,6 +75,7 @@ function main() {
   function applyCamera() {
     camera.position.setFromSpherical(sph).add(target);
     camera.lookAt(target);
+    backdrop.position.copy(camera.position);
   }
 
   let dragging = false, lastX = 0, lastY = 0;
@@ -170,6 +172,11 @@ function main() {
     { id: 'multimeter', name: '数字万用表', build: buildMultimeter },
     { id: 'hikmicro-h11', name: 'HM-TPH11 手持热成像仪', build: buildThermalImager },
     { id: 'conquest-rugged-phone', name: '征服 CONQUEST 三防终端', build: buildRuggedPhone },
+    { id: 'multimeter-2', name: '数字万用表2', build: buildMultimeter2 },
+    { id: 'air-detector', name: '空气检测仪', build: buildAirDetector },
+    { id: 'kindergarten-frame', name: '幼儿园墙挂相框', build: buildKindergartenFrame,
+      view: { theta: 1.45, phi: 1.43, fitViewport: true, spin: false } },
+    { id: 'hikvision-column-speaker', name: '海康威视网络音柱', build: buildHikvisionColumnSpeaker },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -194,6 +201,13 @@ function main() {
     const rec = MODELS.find(m => m.id === id) || MODELS[0];
     currentId = rec.id;
     currentRec = rec;
+    // 模型作者可以指定初始机位(如相框要正对看)
+    spin = rec.view?.spin !== false;
+    if (rec.view) {
+      sph.theta = rec.view.theta;
+      sph.phi = rec.view.phi;
+      pivot.rotation.set(0, 0, 0);
+    }
     if (currentModel) {
       pivot.remove(currentModel);
       // 导入的模型是常驻对象(切回来还用它),不能销毁几何
@@ -245,6 +259,14 @@ function main() {
     pivot.rotation.y = spinSaved;              // 恢复转台(包围盒已经量完)
     pivot.updateMatrixWorld(true);
     sph.radius = THREE.MathUtils.clamp(fit, 11, 5000);
+    // 模型作者要求「整件入画」时(fitViewport),按包围球反推距离:
+    // 扁平板件用包围盒取景会在转角度时出画,按球算是唯一稳妥的解
+    if (rec.view?.fitViewport) {
+      const halfVertical = THREE.MathUtils.degToRad(camera.fov / 2);
+      const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
+      sph.radius = THREE.MathUtils.clamp(
+        sphere.radius * 1.06 / Math.sin(Math.min(halfVertical, halfHorizontal)), 11, 500);
+    }
     // 缩放范围随模型自适应:导入的大件要能退得更远,小件要能凑得更近
     zoomMin = Math.max(2, sphere.radius * 0.55);
     zoomMax = Math.max(300, sphere.radius * 12);
