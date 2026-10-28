@@ -17,6 +17,7 @@ const modelSources = [
   'clamp-meter.js',
   'thermal-imager.js',
   'rugged-phone.js',
+  'poe-security-switch.js',
 ].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const importerSrc = fs.readFileSync('importer.js', 'utf8');
 // 导入功能依赖 three 的 addons(FBXLoader 及其 NURBS/fflate 依赖),先摊平再内联
@@ -85,12 +86,12 @@ const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n$
 let html = fs.readFileSync('index.html', 'utf8');
 
 let removed = 0;
-html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager|rugged-phone|multimeter-2|air-detector|kindergarten-frame|hikvision-column-speaker)\.js"><\/script>\r?\n?/g, () => {
+html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager|rugged-phone|multimeter-2|air-detector|kindergarten-frame|hikvision-column-speaker|poe-security-switch)\.js"><\/script>\r?\n?/g, () => {
   removed++;
   return '';
 });
-if (removed !== 12) {
-  console.error('index.html 里的外部脚本标签数量异常(期望 12 个,实际 ' + removed + ' 个)');
+if (removed !== 13) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 13 个,实际 ' + removed + ' 个)');
   process.exit(1);
 }
 

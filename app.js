@@ -177,6 +177,8 @@ function main() {
     { id: 'kindergarten-frame', name: '幼儿园墙挂相框', build: buildKindergartenFrame,
       view: { theta: 1.45, phi: 1.43, fitViewport: true, spin: false } },
     { id: 'hikvision-column-speaker', name: '海康威视网络音柱', build: buildHikvisionColumnSpeaker },
+    { id: 'poe-security-switch', name: '24口千兆 PoE+ 安防交换机', build: buildPoeSecuritySwitch,
+      view: { theta: 2.62, phi: 1.36 } },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
