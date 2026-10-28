@@ -25,6 +25,7 @@
   #tools button:hover, #tools select:hover { background: #fff; color: #22262b; border-color: #9aa2ab; }
   #tools select { max-width: 180px; }
   #tools button:disabled { opacity: .45; cursor: not-allowed; }
+  #tools button.is-off { color: #7c848c; background: rgba(255, 255, 255, .62); border-style: dashed; }
 
   /* ---------- 导入模型的调整面板 ---------- */
   #panel {
@@ -98,6 +99,7 @@
 <body>
 <div id="tools">
   <select id="model-select" title="选择模型"></select>
+  <button id="btn-spin" title="模型正在自动旋转,点击暂停">暂停旋转</button>
   <button id="btn-import" title="导入外部 FBX 模型:可同时选中 fbx 与贴图,也可选包含 fbx+贴图的 zip,或直接把文件/文件夹拖进窗口">导入模型</button>
   <button id="btn-shell" title="隐藏/显示外壳,查看内部结构">查看内部</button>
   <button id="btn-fbx" title="导出 zip 压缩包:模型 fbx + glb + 全部贴图 + 导入说明,可整包导入 Unity / Blender">导出压缩包</button>
@@ -94150,7 +94152,7 @@ function main() {
   let spin = true;
   window.__debug = {
     setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; if (r) sph.radius = r; applyCamera(); },
-    setSpin(on) { spin = on; },
+    setSpin(on) { spin = on; syncSpinBtn(); },
     setRot(y) { pivot.rotation.y = y; },
     model: () => currentModel,
     scene: () => scene,
@@ -94303,6 +94305,7 @@ function main() {
     currentRec = rec;
     // 模型作者可以指定初始机位(如相框要正对看)
     spin = rec.view?.spin !== false;
+    syncSpinBtn();
     if (rec.view) {
       sph.theta = rec.view.theta;
       sph.phi = rec.view.phi;
@@ -94428,7 +94431,21 @@ function main() {
       shellBtn.textContent = shellOn ? '查看内部' : '显示外壳';
     });
   }
+
+  // 旋转开关:默认开启。文案描述「点下去会发生什么」,和「查看内部」一致
+  function syncSpinBtn() {
+    const b = document.getElementById('btn-spin');
+    if (!b) return;
+    b.textContent = spin ? '暂停旋转' : '开启旋转';
+    b.title = spin ? '模型正在自动旋转,点击暂停' : '已暂停,点击恢复自动旋转';
+    b.classList.toggle('is-off', !spin);
+  }
+  {
+    const b = document.getElementById('btn-spin');
+    if (b) b.addEventListener('click', () => { spin = !spin; syncSpinBtn(); });
+  }
   setModel(MODELS[MODELS.length - 1].id);
+  syncSpinBtn();   // 初始状态(部分模型自带 view.spin = false)
 
   // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
   {

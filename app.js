@@ -50,7 +50,7 @@ function main() {
   let spin = true;
   window.__debug = {
     setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; if (r) sph.radius = r; applyCamera(); },
-    setSpin(on) { spin = on; },
+    setSpin(on) { spin = on; syncSpinBtn(); },
     setRot(y) { pivot.rotation.y = y; },
     model: () => currentModel,
     scene: () => scene,
@@ -203,6 +203,7 @@ function main() {
     currentRec = rec;
     // 模型作者可以指定初始机位(如相框要正对看)
     spin = rec.view?.spin !== false;
+    syncSpinBtn();
     if (rec.view) {
       sph.theta = rec.view.theta;
       sph.phi = rec.view.phi;
@@ -328,7 +329,21 @@ function main() {
       shellBtn.textContent = shellOn ? '查看内部' : '显示外壳';
     });
   }
+
+  // 旋转开关:默认开启。文案描述「点下去会发生什么」,和「查看内部」一致
+  function syncSpinBtn() {
+    const b = document.getElementById('btn-spin');
+    if (!b) return;
+    b.textContent = spin ? '暂停旋转' : '开启旋转';
+    b.title = spin ? '模型正在自动旋转,点击暂停' : '已暂停,点击恢复自动旋转';
+    b.classList.toggle('is-off', !spin);
+  }
+  {
+    const b = document.getElementById('btn-spin');
+    if (b) b.addEventListener('click', () => { spin = !spin; syncSpinBtn(); });
+  }
   setModel(MODELS[MODELS.length - 1].id);
+  syncSpinBtn();   // 初始状态(部分模型自带 view.spin = false)
 
   // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
   {
