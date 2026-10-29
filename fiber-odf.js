@@ -157,7 +157,7 @@ function buildFiberODF(THREE) {
 
   // 加强芯固定夹
   const rearClamp = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.8, 1.3), matShield);
-  rearClamp.position.set(0, -2.0, rearPanelZ - 0.75);
+  rearClamp.position.set(0, -2.0, rearPanelZ - 1.6);
   tag(rearClamp, '光缆加强芯固定夹', '用于固定光缆芳纶纱/钢丝加强芯，避免纤芯受力。', 'BoxGeometry', 'Nickel-plated Steel');
   baseGroup.add(rearClamp);
 
@@ -197,17 +197,35 @@ function buildFiberODF(THREE) {
   rearLabel.position.set(0, 1.0, rearPanelZ - 0.12);
   baseGroup.add(rearLabel);
 
-  // 后部进缆尾纤（6 根黄色单模纤）
-  for (let i = 0; i < 6; i++) {
-    const x = -2.0 + i * 0.8;
-    const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(x, -0.55, rearPanelZ - 0.9),
-      new THREE.Vector3(x, -1.2, rearPanelZ - 2.6),
-      new THREE.Vector3(x + 0.5, -2.6, rearPanelZ - 4.4),
-      new THREE.Vector3(x + 1.2, -3.2, rearPanelZ - 5.2),
-    ]);
-    const cord = new THREE.Mesh(new THREE.TubeGeometry(curve, 22, 0.1, 8, false), matFiber);
-    baseGroup.add(cord);
+  // 后部进缆：一根黑色室外光缆从进缆护套引入，穿过加强芯固定夹后自然下垂。
+  // 之前这里放了 6 根悬空的黄色尾纤，既没有接入点，也会和固定夹穿插，
+  // 看起来像“接口歪了/断开”。改为单根进缆后，背面走线是连续的。
+  const dropCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -0.55, rearPanelZ - 0.95),
+    new THREE.Vector3(0, -1.35, rearPanelZ - 1.35),
+    new THREE.Vector3(0, -2.0, rearPanelZ - 1.6),   // 穿过加强芯固定夹
+    new THREE.Vector3(0.5, -3.0, rearPanelZ - 3.0),
+    new THREE.Vector3(1.2, -4.2, rearPanelZ - 5.0),
+  ]);
+  const dropCable = new THREE.Mesh(new THREE.TubeGeometry(dropCurve, 40, 0.45, 12, false), matRubber);
+  dropCable.name = 'Odf_IncomingCable';
+  tag(dropCable, '室外单模光缆进缆', '一根黑色室外光缆从后部进缆护套引入，经加强芯固定夹固定后进入熔接盘。', 'TubeGeometry (Spline)', 'LSZH Outdoor Fiber Cable');
+  baseGroup.add(dropCable);
+
+  // 进缆口热缩护套
+  const dropBoot = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.15, 1.6, 20), matRubber);
+  dropBoot.rotation.x = Math.PI / 2;
+  dropBoot.position.set(0, -0.8, rearPanelZ - 1.1);
+  baseGroup.add(dropBoot);
+
+  // 光缆标签扎带
+  for (const t of [0.42, 0.78]) {
+    const p = dropCurve.getPoint(t);
+    const tan = dropCurve.getTangent(t).normalize();
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.06, 6, 18), matShield);
+    tie.position.copy(p);
+    tie.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+    baseGroup.add(tie);
   }
 
   // ---------- front panel ----------
@@ -292,19 +310,50 @@ function buildFiberODF(THREE) {
   trayGroup.add(clamp);
 
   // ---------- front patch cords ----------
-  for (let i = 0; i < 8; i++) {
-    const x = ax(i * 1.5 < 12 ? i * 1.5 : 11) + (i % 2) * 0.3;
-    const y0 = i % 2 === 0 ? 0.85 : -0.85;
+  // 尾纤必须从真实的 LC 端口位置引出：之前用一组与适配器不对应的 x 坐标，
+  // 看起来像悬空/断开的“网线接口”。这里按适配器中心 ±0.25 的端口坐标布线，
+  // 并在端口处补上 LC 连接器与黄色尾套，保证视觉上是插好的。
+  const patchPlan = [
+    { i: 0, row: 0, dx: -0.25 },
+    { i: 3, row: 0, dx: 0.25 },
+    { i: 6, row: 0, dx: -0.25 },
+    { i: 9, row: 0, dx: 0.25 },
+    { i: 1, row: 1, dx: -0.25 },
+    { i: 4, row: 1, dx: 0.25 },
+    { i: 7, row: 1, dx: -0.25 },
+    { i: 10, row: 1, dx: 0.25 },
+  ];
+
+  patchPlan.forEach((p, idx) => {
+    const x = ax(p.i) + p.dx;
+    const y0 = p.row === 0 ? 0.85 : -0.85;
+
+    // LC 连接器本体（插在适配器端口上）
+    const lcBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.22, 0.6),
+      p.row === 0 ? matBlue : matGreen
+    );
+    lcBody.position.set(x, y0, frontZ + 1.0);
+    lcBody.name = `Odf_LcPlug_${idx + 1}`;
+    tag(lcBody, `LC 单芯连接器 ${idx + 1}`, '插在 LC 双工适配器端口的 LC/UPC 连接器。', 'BoxGeometry', 'PBT + Ceramic Ferrule');
+    patchGroup.add(lcBody);
+
+    // 黄色尾纤护套
+    const lcBoot = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.55, 10), matFiber);
+    lcBoot.rotation.x = Math.PI / 2;
+    lcBoot.position.set(x, y0, frontZ + 1.45);
+    patchGroup.add(lcBoot);
+
     const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(x, y0, frontZ + 0.7),
-      new THREE.Vector3(x, y0 - 0.5, frontZ + 2.6),
-      new THREE.Vector3(x + 0.6, -1.6, frontZ + 3.8),
-      new THREE.Vector3(x + 1.2, -2.4, frontZ + 4.6),
+      new THREE.Vector3(x, y0, frontZ + 1.68),
+      new THREE.Vector3(x, y0 - 0.35, frontZ + 2.6),
+      new THREE.Vector3(x + 0.5, y0 - 1.3, frontZ + 3.8),
+      new THREE.Vector3(x + 1.1, -2.35, frontZ + 4.7),
     ]);
     const cord = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.09, 8, false), matFiber);
-    cord.name = `Odf_PatchCord_${i + 1}`;
+    cord.name = `Odf_PatchCord_${idx + 1}`;
     patchGroup.add(cord);
-  }
+  });
 
   // front horizontal cable management bar + rings
   const bar = new THREE.Mesh(new THREE.BoxGeometry(34, 0.35, 0.35), matShield);
