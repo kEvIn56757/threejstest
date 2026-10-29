@@ -7,6 +7,7 @@ const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
 // 全部程序化模型(新增模型只需在这里和 index.html 各加一行)
 const modelFiles = [
+  'model-kit.js',
   'ronk-ups.js',
   'clamp-meter.js',
   'earth-tester.js',
@@ -18,6 +19,19 @@ const modelFiles = [
   'thermal-imager.js',
   'rugged-phone.js',
   'poe-security-switch.js',
+  'nvr.js',
+  'dome-camera.js',
+  'ptz-camera.js',
+  'poe-switch-8.js',
+  'fiber-odf.js',
+  'monitor-4k.js',
+  'video-server.js',
+  'security-platform.js',
+  'ip-intercom.js',
+  'paging-microphone.js',
+  'positioner-signal-source.js',
+  'positioner-test-connectors.js',
+  'leak-detector-sprayer.js',
 ];
 const modelSources = modelFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const importerSrc = fs.readFileSync('importer.js', 'utf8');

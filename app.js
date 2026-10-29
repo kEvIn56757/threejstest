@@ -179,6 +179,28 @@ function main() {
     { id: 'conquest-rugged-phone', name: '征服 CONQUEST 三防终端', build: buildRuggedPhone },
     { id: 'poe-security-switch', name: '24口千兆 PoE+ 安防交换机', build: buildPoeSecuritySwitch,
       view: { theta: 2.62, phi: 1.36 } },
+    { id: 'nvr-4bay', name: 'NVR 网络视频录像机 (4盘位)', build: buildNVR,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'dome-camera', name: '海康威视半球网络摄像机', build: buildDomeCamera },
+    { id: 'ptz-camera', name: '7寸红外网络球机 (PTZ)', build: buildPTZCamera,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'poe-switch-8', name: '8口千兆 PoE 交换机', build: buildPoeSwitch8,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'fiber-odf', name: '24口光纤配线架 (ODF)', build: buildFiberODF,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'monitor-4k', name: '27寸 4K 安防监视器', build: buildMonitor4K,
+      view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
+    { id: 'video-server', name: '2U 视频服务器', build: buildVideoServer,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'security-platform', name: '企业安全管理平台一体机', build: buildSecurityPlatform,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'ip-intercom', name: 'IP 网络可视对讲终端', build: buildIPIntercom,
+      view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
+    { id: 'paging-microphone', name: '网络寻呼话筒', build: buildPagingMicrophone,
+      view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
+    { id: 'positioner-signal-source', name: '定位器调试信号源', build: buildPositionerSignalSource },
+    { id: 'positioner-test-connectors', name: '定位器检测线接头 (无线)', build: buildPositionerTestConnectors },
+    { id: 'leak-detector-sprayer', name: '气密检漏喷壶', build: buildLeakDetectorSprayer },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -188,7 +210,7 @@ function main() {
   let currentRec = null;
   let projectStoreAvailable = false;
   let projectSaving = false;
-  let currentId = MODELS[MODELS.length - 1].id;
+  let currentId = 'nvr-4bay';   // 默认展示系统核心设备 NVR
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
   function nameModel() {
@@ -350,7 +372,7 @@ function main() {
     const b = document.getElementById('btn-spin');
     if (b) b.addEventListener('click', () => { spin = !spin; syncSpinBtn(); });
   }
-  setModel(MODELS[MODELS.length - 1].id);
+  setModel('nvr-4bay');
   syncSpinBtn();   // 初始状态(部分模型自带 view.spin = false)
 
   // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
