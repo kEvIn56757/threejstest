@@ -50,7 +50,7 @@ function main() {
   let spin = true;
   window.__debug = {
     setView(theta, phi, r) { sph.theta = theta; sph.phi = phi; if (r) sph.radius = r; applyCamera(); },
-    setSpin(on) { spin = on; },
+    setSpin(on) { spin = on; syncSpinBtn(); },
     setRot(y) { pivot.rotation.y = y; },
     model: () => currentModel,
     scene: () => scene,
@@ -177,6 +177,8 @@ function main() {
     { id: 'hikvision-column-speaker', name: '海康威视网络音柱', build: buildHikvisionColumnSpeaker },
     { id: 'hikmicro-h11', name: 'HM-TPH11 手持热成像仪', build: buildThermalImager },
     { id: 'conquest-rugged-phone', name: '征服 CONQUEST 三防终端', build: buildRuggedPhone },
+    { id: 'poe-security-switch', name: '24口千兆 PoE+ 安防交换机', build: buildPoeSecuritySwitch,
+      view: { theta: 2.62, phi: 1.36 } },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -202,7 +204,9 @@ function main() {
     currentId = rec.id;
     const previousRec = currentRec;
     currentRec = rec;
+    // 模型作者可以指定初始机位(如相框要正对看)
     spin = rec.view?.spin !== false;
+    syncSpinBtn();
     if (rec.view) {
       sph.theta = rec.view.theta;
       sph.phi = rec.view.phi;
@@ -262,6 +266,14 @@ function main() {
     pivot.rotation.y = spinSaved;              // 恢复转台(包围盒已经量完)
     pivot.updateMatrixWorld(true);
     sph.radius = THREE.MathUtils.clamp(fit, 11, 5000);
+    // 模型作者要求「整件入画」时(fitViewport),按包围球反推距离:
+    // 扁平板件用包围盒取景会在转角度时出画,按球算是唯一稳妥的解
+    if (rec.view?.fitViewport) {
+      const halfVertical = THREE.MathUtils.degToRad(camera.fov / 2);
+      const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
+      sph.radius = THREE.MathUtils.clamp(
+        sphere.radius * 1.06 / Math.sin(Math.min(halfVertical, halfHorizontal)), 11, 500);
+    }
     // 缩放范围随模型自适应:导入的大件要能退得更远,小件要能凑得更近
     zoomMin = Math.max(2, sphere.radius * 0.55);
     zoomMax = Math.max(300, sphere.radius * 12);
@@ -323,7 +335,21 @@ function main() {
       shellBtn.textContent = shellOn ? '查看内部' : '显示外壳';
     });
   }
+
+  // 旋转开关:默认开启。文案描述「点下去会发生什么」,和「查看内部」一致
+  function syncSpinBtn() {
+    const b = document.getElementById('btn-spin');
+    if (!b) return;
+    b.textContent = spin ? '暂停旋转' : '开启旋转';
+    b.title = spin ? '模型正在自动旋转,点击暂停' : '已暂停,点击恢复自动旋转';
+    b.classList.toggle('is-off', !spin);
+  }
+  {
+    const b = document.getElementById('btn-spin');
+    if (b) b.addEventListener('click', () => { spin = !spin; syncSpinBtn(); });
+  }
   setModel(MODELS[MODELS.length - 1].id);
+  syncSpinBtn();   // 初始状态(部分模型自带 view.spin = false)
 
   // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
   {

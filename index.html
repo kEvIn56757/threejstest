@@ -25,6 +25,7 @@
   #tools button:hover, #tools select:hover { background: #fff; color: #22262b; border-color: #9aa2ab; }
   #tools select { max-width: 180px; }
   #tools button:disabled { opacity: .45; cursor: not-allowed; }
+  #tools button.is-off { color: #7c848c; background: rgba(255, 255, 255, .62); border-style: dashed; }
 
   /* ---------- 导入模型的调整面板 ---------- */
   #panel {
@@ -98,6 +99,7 @@
 <body>
 <div id="tools">
   <select id="model-select" title="选择模型"></select>
+  <button id="btn-spin" title="模型正在自动旋转,点击暂停">暂停旋转</button>
   <button id="btn-import" title="导入外部 FBX 模型:可同时选中 fbx 与贴图,也可选包含 fbx+贴图的 zip,或直接把文件/文件夹拖进窗口">导入模型</button>
   <button id="btn-shell" title="隐藏/显示外壳,查看内部结构">查看内部</button>
   <button id="btn-fbx" title="导出 zip 压缩包:模型 fbx + glb + 全部贴图 + 导入说明,可整包导入 Unity / Blender">导出压缩包</button>
@@ -138,6 +140,7 @@
 <script src="./hikvision-column-speaker.js"></script>
 <script src="./thermal-imager.js"></script>
 <script src="./rugged-phone.js"></script>
+<script src="./poe-security-switch.js"></script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
