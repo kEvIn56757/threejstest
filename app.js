@@ -198,6 +198,9 @@ function main() {
       view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
     { id: 'paging-microphone', name: '网络寻呼话筒', build: buildPagingMicrophone,
       view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
+    { id: 'positioner-signal-source', name: '定位器调试信号源', build: buildPositionerSignalSource },
+    { id: 'positioner-test-connectors', name: '定位器检测线接头 (无线)', build: buildPositionerTestConnectors },
+    { id: 'leak-detector-sprayer', name: '气密检漏喷壶', build: buildLeakDetectorSprayer },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 

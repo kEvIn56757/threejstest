@@ -26,6 +26,9 @@
 | 企业安全管理平台一体机 | `security-platform.js` | 44×8.8×50 cm(2U);前置 10 寸平台状态屏(摄像机/报警/存储/事件/地图)、4 个热插拔盘位、状态灯与 USB;后置 GE/HDMI/VGA/报警/冗余电源;「查看内部」露出平台主板/硬盘/电源 |
 | IP 网络可视对讲终端 | `ip-intercom.js` | 20×30 cm 壁挂门口机;7 寸访客呼叫屏、摄像头 + 双红外灯、扬声器阵列、绿色呼叫键、RFID 刷卡区、防拆螺钉;「查看内部」露出主控板/扬声器/摄像头模组 |
 | 网络寻呼话筒 | `paging-microphone.js` | 24×18×5 cm 桌面控制台;3.5 寸寻呼屏、3×4 数字键盘、6 个分区键、PTT 按键、音量旋钮、状态灯与 30cm 鹅颈麦克风;「查看内部」露出控制板/扬声器 |
+| 定位器调试信号源 | `positioner-signal-source.js` | 通用工业手持式过程校验仪;12.000mA / 50% 阀位指令显示、0/50/100% 步进键、24V 回路供电、HART/250Ω 与 mA 端子、红黑插头和鳄鱼夹;「查看内部」露出主控板、HART 调制解调器、隔离 DAC、4 节 AA 电池。无指定实机图纸,尺寸及内部布局为示意 |
+| 定位器检测线接头 (无线) | `positioner-test-connectors.js` | 独立的红黑香蕉插头、应力护套与鳄鱼夹,不含中间线缆;四组根节点可独立移动,`userData.cableAnchor` 标记 Unity 线缆连接点 |
+| 气密检漏喷壶 | `leak-detector-sprayer.js` | 通用 500mL 手压式检漏瓶;半透明 HDPE 瓶身、检漏液、容量刻度、可调喷嘴与扳机;「查看内部」露出泵腔、活塞、回位弹簧、单向阀、进液吸管及滤网。无指定实机图纸,尺寸为示意 |
 
 ![预览](cam.html)
 
@@ -129,6 +132,9 @@ npm start            # 零依赖静态服务器,默认端口 8889
 | `security-platform.js` | 企业安全管理平台一体机(10 寸状态屏、4 盘位、平台 UI) |
 | `ip-intercom.js` | IP 网络可视对讲终端(屏幕、摄像头、呼叫键、RFID) |
 | `paging-microphone.js` | 网络寻呼话筒(鹅颈麦、键盘、分区键、PTT) |
+| `positioner-signal-source.js` | 定位器调试信号源(4–20mA、24V 回路、HART、插头/鳄鱼夹、内部电路板/电池) |
+| `positioner-test-connectors.js` | 定位器检测线接头(无线缆,供 Unity 程序化生线) |
+| `leak-detector-sprayer.js` | 气密检漏喷壶(半透明瓶身、可调喷头、泵与吸管) |
 | `fbx-exporter.js` | 导出模块:二进制 FBX 7.4 + GLB 写出器(零依赖,不依赖 three) |
 | `importer.js` | 导入模块:解析外部 FBX(含 zip 解包、贴图路径映射、单位换算、多材质拆分、顶点色兜底) |
 | `zip.js` | 浏览器端零依赖 ZIP 打包 / 解包(CRC32 + CompressionStream,不支持时退化为 store) |
