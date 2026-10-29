@@ -605,9 +605,12 @@ function exportGLB(scene, opts = {}) {
   let off = 0;
   for (const p of binParts) { bin.set(p, off); off += p.byteLength; off = (off + 3) & ~3; }
 
-  let jsonStr = JSON.stringify(gltf);
-  while (jsonStr.length % 4 !== 0) jsonStr += ' ';
-  const jsonBytes = new TextEncoder().encode(jsonStr);
+  // GLB chunks align by UTF-8 byte count, not JavaScript character count.
+  // Chinese node/material names may take three bytes per character.
+  const encodedJson = new TextEncoder().encode(JSON.stringify(gltf));
+  const jsonBytes = new Uint8Array(pad4(encodedJson.length));
+  jsonBytes.fill(0x20);
+  jsonBytes.set(encodedJson);
 
   const total = 12 + 8 + jsonBytes.length + 8 + bin.length;
   const out = new ArrayBuffer(total);

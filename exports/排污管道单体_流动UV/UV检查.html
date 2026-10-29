@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>排污管道 · 流动 UV 检查</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101922;color:#e3ebf3;font:15px 'Microsoft YaHei',sans-serif}header{padding:22px 30px;border-bottom:1px solid #334250}h1{font-size:22px;margin:0 0 8px}p{color:#aabcce;margin:0;line-height:1.7}.layout{display:grid;grid-template-columns:1fr 420px;height:calc(100vh - 110px);min-height:540px}#view{position:relative;min-width:0}#view canvas{width:100%;height:100%;display:block}.controls{position:absolute;left:28px;top:20px;display:flex;gap:10px}button{border:1px solid #4c697e;background:#203343;color:#e4eff7;border-radius:6px;padding:9px 13px;cursor:pointer}aside{padding:22px;border-left:1px solid #334250}h2{font-size:16px;margin:0 0 12px}#uv{width:100%;height:390px;background:#142532;border-radius:8px}.status{color:#74deb8;margin-top:12px}.caption{position:absolute;bottom:24px;left:28px;color:#adc3d6}
+</style>
+<header><h1>排污管道单体 · 连续流动 UV0</h1><p>U 绕管一周 · V 沿中心线从顶部 0 递增至弯头出口 1 · Direction = (0, −1)</p></header>
+<div class="layout"><div id="view"><div class="controls"><button id="all">显示阀门等部件</button><button id="pause">暂停流动</button></div><div class="caption">黄色标记沿 V 增大方向移动，穿过直管和弯头</div></div><aside><h2>UV 展开：单张连续长条</h2><canvas id="uv" width="700" height="780"></canvas><p class="status" id="status">读取已保存的模型…</p><p>11 个截面环 / 160 个三角面<br>接缝位于管道背面，端点 UV 以 0 和 1 配对。</p></aside></div>
+<script type="module">
+import * as T from '../../vendor/three.module.js';
+const data=await (await fetch('../../api/project-models/1ed40391-74c6-4ff2-9f91-fa6608bd8de4')).json();
+const root=await new T.ObjectLoader().parseAsync(data.scene), pipe=root.getObjectByName('排污管道_红色');
+const scene=new T.Scene();scene.background=new T.Color('#101922');scene.add(root);
+const renderer=new T.WebGLRenderer({antialias:true});renderer.setPixelRatio(devicePixelRatio);document.querySelector('#view').append(renderer.domElement);
+const box=new T.Box3().setFromObject(pipe),target=box.getCenter(new T.Vector3());
+const camera=new T.OrthographicCamera(-25,25,22,-22,.1,300);camera.position.copy(target).add(new T.Vector3(32,8,17));camera.lookAt(target);
+scene.add(new T.HemisphereLight(0xdceaff,0x5e6874,3));const light=new T.DirectionalLight(0xffffff,3);light.position.set(15,30,20);scene.add(light);
+let showAll=false,paused=false,time=0;root.traverse(o=>{if(o.isMesh)o.visible=o===pipe;});
+pipe.material=new T.ShaderMaterial({side:T.DoubleSide,uniforms:{time:{value:0}},vertexShader:`varying vec2 q;varying vec3 n;void main(){q=uv;n=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec2 q;varying vec3 n;uniform float time;void main(){vec2 tile=vec2(q.x*8.,q.y*14.-time);vec2 f=fract(tile);float checker=mod(floor(tile.x)+floor(tile.y),2.);vec3 color=mix(vec3(.02,.18,.25),vec3(.03,.4,.52),checker);float grid=step(f.x,.025)+step(f.y,.025);color=mix(color,vec3(.6,.85,.85),clamp(grid,0.,1.)*.6);float chevron=1.-smoothstep(.04,.09,abs(f.y-(.62-.6*abs(f.x-.5))));color=mix(color,vec3(1.,.85,.2),chevron);float shade=.5+.5*abs(dot(normalize(n),normalize(vec3(.4,.5,1.))));gl_FragColor=vec4(color*shade,1.);}`});
+document.querySelector('#all').onclick=()=>{showAll=!showAll;root.traverse(o=>{if(o.isMesh)o.visible=showAll||o===pipe;});document.querySelector('#all').textContent=showAll?'仅显示管道':'显示阀门等部件';};
+document.querySelector('#pause').onclick=()=>{paused=!paused;document.querySelector('#pause').textContent=paused?'继续流动':'暂停流动';};
+function resize(){const area=document.querySelector('#view'),w=area.clientWidth,h=area.clientHeight;renderer.setSize(w,h);camera.left=-22*w/h;camera.right=22*w/h;camera.updateProjectionMatrix();}resize();addEventListener('resize',resize);
+const canvas=document.querySelector('#uv'),ctx=canvas.getContext('2d'),uv=pipe.geometry.attributes.uv;
+ctx.fillStyle='#aabcce';ctx.font='24px Microsoft YaHei';ctx.fillText('顶部接口 · V = 0',80,38);ctx.fillText('弯头出口 · V = 1',80,775);
+ctx.fillStyle='#193746';ctx.fillRect(80,65,540,650);ctx.strokeStyle='#69d7d0';ctx.lineWidth=1;
+for(let i=0;i<uv.count;i+=3){ctx.beginPath();for(let c=0;c<3;c++){const x=80+uv.getX(i+c)*540,y=65+uv.getY(i+c)*650;c?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();}
+ctx.fillStyle='#aabcce';ctx.fillText('U = 0',80,742-10);ctx.fillText('U = 1',540,742-10);
+document.querySelector('#status').textContent='✓ UV0 已载入 · 无翻面 · 接缝连续';
+let last=performance.now();function draw(now){if(!paused)time+=(now-last)/1000*.8;last=now;pipe.material.uniforms.time.value=time;renderer.render(scene,camera);requestAnimationFrame(draw);}requestAnimationFrame(draw);
+</script></html>

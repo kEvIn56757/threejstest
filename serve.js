@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const { createModelStore } = require('./project-model-store');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || process.argv[2] || 8889);
@@ -31,7 +32,13 @@ const MIME = {
   '.wasm': 'application/wasm',
 };
 
-const server = http.createServer((req, res) => {
+function createServer({ root = ROOT, modelRoot = path.join(root, 'assets', 'imported-models') } = {}) {
+  const store = createModelStore(modelRoot);
+  const json = (res, status, data) => {
+    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(data));
+  };
+  return http.createServer(async (req, res) => {
   let pathname;
   try {
     pathname = decodeURIComponent(url.parse(req.url).pathname);
@@ -40,9 +47,56 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (pathname === '/api/project-models' || pathname.startsWith('/api/project-models/')) {
+    try {
+      if (req.method === 'GET') {
+        if (pathname === '/api/project-models') json(res, 200, { models: await store.list() });
+        else json(res, 200, await store.read(pathname.slice('/api/project-models/'.length)));
+        return;
+      }
+      if (req.method !== 'POST' || pathname !== '/api/project-models') {
+        json(res, 405, { error: '不支持此操作' }); return;
+      }
+      // A local project writer is available only to this app on loopback.
+      // No CORS permission is granted to unrelated websites or LAN clients.
+      const address = req.socket.remoteAddress || '';
+      const local = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+      const host = req.headers.host || '';
+      if (!local || !/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host) ||
+        (req.headers.origin && req.headers.origin !== 'http://' + host)) {
+        json(res, 403, { error: '只能从本机项目页面保存模型' }); return;
+      }
+      if (!(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+        json(res, 415, { error: '请使用 JSON 保存模型' }); return;
+      }
+      const chunks = [];
+      let length = 0;
+      for await (const chunk of req) {
+        length += chunk.length;
+        if (length > 128 * 1024 * 1024) {
+          json(res, 413, { error: '模型数据超过 128 MB，暂时无法保存' }); return;
+        }
+        chunks.push(chunk);
+      }
+      let input;
+      try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+      catch { json(res, 400, { error: '保存数据不是有效的 JSON' }); return; }
+      const model = await store.save(input);
+      json(res, input.id ? 200 : 201, { model });
+    } catch (err) {
+      if (!err.status) console.error('[models]', err);
+      json(res, err.status || 500, { error: err.status ? err.message : '保存或读取失败，请检查项目目录是否可写' });
+    }
+    return;
+  }
+
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405).end('Method Not Allowed'); return;
+  }
+
   // 防目录穿越：解析后必须仍在 ROOT 之内
-  let target = path.resolve(ROOT, '.' + pathname);
-  if (target !== ROOT && !target.startsWith(ROOT + path.sep)) {
+  let target = path.resolve(root, '.' + pathname);
+  if (target !== root && !target.startsWith(root + path.sep)) {
     res.writeHead(403).end('Forbidden');
     return;
   }
@@ -63,8 +117,11 @@ const server = http.createServer((req, res) => {
       res.end(buf);
     });
   });
-});
+  });
+}
 
+if (require.main === module) {
+const server = createServer();
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
     console.error(`[serve] 端口 ${PORT} 已被占用。换端口：PORT=8890 npm start`);
@@ -78,3 +135,6 @@ server.listen(PORT, HOST, () => {
   console.log(`[serve] http://${HOST}:${PORT}/cam.html  (单文件版)`);
   console.log('[serve] Ctrl+C 停止');
 });
+}
+
+module.exports = { createServer };

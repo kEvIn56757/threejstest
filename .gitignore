@@ -9,3 +9,11 @@ x_*.png
 y_*.png
 z_*.png
 t.js
+
+# Local browser profiles and inspection artifacts
+.chrome-profile/
+.edge-profile/
+.tmp/
+
+# Keep model recovery snapshots local; track the current saved models
+assets/imported-models/*/backups/

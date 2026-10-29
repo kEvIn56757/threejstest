@@ -186,6 +186,8 @@ function main() {
   scene.add(pivot);
   let currentModel = null;
   let currentRec = null;
+  let projectStoreAvailable = false;
+  let projectSaving = false;
   let currentId = MODELS[MODELS.length - 1].id;
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
@@ -507,6 +509,7 @@ function main() {
 
     const s = rec.stats;
     document.getElementById('p-name').textContent = rec.name;
+    updateSaveStatus(rec);
     const info = document.getElementById('p-info');
     info.textContent = '';
     const l1 = document.createElement('div');
@@ -598,6 +601,8 @@ function main() {
         const rec = {
           id,
           name: '导入 · ' + r.name,
+          modelName: r.name,
+          sourceFile: r.fileName,
           persistent: true,
           group: r.group,
           stats: r.stats,
@@ -711,6 +716,108 @@ function main() {
       if (p) p.hidden = true;
     });
   }
+
+  // ---------- Save imported model snapshots into the local project ----------
+  function updateSaveStatus(rec) {
+    const btn = document.getElementById('p-save');
+    const status = document.getElementById('p-save-status');
+    if (!btn || !status) return;
+    btn.disabled = projectSaving || !projectStoreAvailable;
+    btn.textContent = projectSaving ? '保存中…' : '保存到项目';
+    if (!projectStoreAvailable) {
+      status.textContent = location.protocol === 'file:'
+        ? '请通过 npm start 打开项目后保存'
+        : '请使用项目服务器运行，以启用保存功能';
+    } else if (rec?.projectId) {
+      status.textContent = '已保存到项目；修改后点击按钮再次保存';
+      status.title = rec.projectPath || '';
+    } else {
+      status.textContent = '尚未保存；保存后刷新页面也能恢复';
+      status.title = '';
+    }
+  }
+
+  async function saveCurrentModelToProject() {
+    const rec = currentRec;
+    if (!rec?.persistent || projectSaving || !projectStoreAvailable) return;
+    projectSaving = true;
+    updateSaveStatus(rec);
+    try {
+      applyEdit(rec);
+      rec.group.updateMatrix();
+      const payload = {
+        id: rec.projectId || undefined,
+        name: rec.modelName || rec.name.replace(/^(导入|项目)\s*·\s*/, ''),
+        sourceFile: rec.sourceFile || '', stats: rec.stats, notes: rec.notes || [],
+        basePos: { x: rec.basePos.x, y: rec.basePos.y, z: rec.basePos.z },
+        baseScale: rec.baseScale, edit: { ...rec.edit }, scene: rec.group.toJSON(),
+      };
+      const response = await fetch('/api/project-models', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '保存失败');
+      const saved = result.model;
+      rec.projectId = saved.id;
+      rec.projectPath = saved.path;
+      rec.modelName = saved.name;
+      rec.name = '项目 · ' + saved.name;
+      const option = [...sel.options].find(o => o.value === rec.id);
+      if (option) option.textContent = rec.name;
+      toast(`已保存「${saved.name}」到项目`, 4000);
+    } catch (err) {
+      console.error(err);
+      toast('保存失败：' + err.message, 6000);
+    } finally {
+      projectSaving = false;
+      if (currentRec?.persistent) updatePanel(currentRec);
+    }
+  }
+
+  async function restoreProjectModels() {
+    if (!/^https?:$/.test(location.protocol)) return;
+    const initialId = currentId;
+    try {
+      const response = await fetch('/api/project-models');
+      if (!response.ok) return;
+      const { models } = await response.json();
+      projectStoreAvailable = true;
+      if (currentRec?.persistent) updateSaveStatus(currentRec);
+      let firstId = null;
+      for (const metadata of models) {
+        try {
+          const result = await fetch('/api/project-models/' + encodeURIComponent(metadata.id));
+          if (!result.ok) throw new Error('读取失败');
+          const saved = await result.json();
+          const group = await new THREE.ObjectLoader().parseAsync(saved.scene);
+          const rec = {
+            id: 'project-' + saved.id, name: '项目 · ' + saved.name,
+            modelName: saved.name, sourceFile: saved.sourceFile,
+            projectId: saved.id, projectPath: saved.path,
+            persistent: true, positioned: true, group,
+            basePos: new THREE.Vector3(saved.basePos.x, saved.basePos.y, saved.basePos.z),
+            baseScale: saved.baseScale, edit: { ...saved.edit },
+            stats: saved.stats, notes: saved.notes || [],
+            build() { return group; },
+          };
+          MODELS.push(rec);
+          const option = document.createElement('option');
+          option.value = rec.id; option.textContent = rec.name;
+          sel?.appendChild(option);
+          if (!firstId) firstId = rec.id;
+        } catch (err) {
+          console.warn('无法恢复项目模型：', metadata.name, err);
+          toast(`无法恢复「${metadata.name}」，原项目文件仍保留`, 6000);
+        }
+      }
+      if (firstId && currentId === initialId) setModel(firstId);
+    } catch (err) {
+      console.warn('项目模型库暂不可用：', err.message);
+    }
+  }
+  document.getElementById('p-save')?.addEventListener('click', saveCurrentModelToProject);
+  restoreProjectModels();
 
   // ---------- animate ----------
   const timer = new THREE.Timer();
