@@ -7,6 +7,7 @@ const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
 // 全部程序化模型(新增模型只需在这里和 index.html 各加一行)
 const modelSources = [
+  'model-kit.js',
   'ronk-ups.js',
   'earth-tester.js',
   'multimeter.js',
@@ -18,6 +19,16 @@ const modelSources = [
   'thermal-imager.js',
   'rugged-phone.js',
   'poe-security-switch.js',
+  'nvr.js',
+  'dome-camera.js',
+  'ptz-camera.js',
+  'poe-switch-8.js',
+  'fiber-odf.js',
+  'monitor-4k.js',
+  'video-server.js',
+  'security-platform.js',
+  'ip-intercom.js',
+  'paging-microphone.js',
 ].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const importerSrc = fs.readFileSync('importer.js', 'utf8');
 // 导入功能依赖 three 的 addons(FBXLoader 及其 NURBS/fflate 依赖),先摊平再内联
@@ -86,12 +97,12 @@ const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n$
 let html = fs.readFileSync('index.html', 'utf8');
 
 let removed = 0;
-html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager|rugged-phone|multimeter-2|air-detector|kindergarten-frame|hikvision-column-speaker|poe-security-switch)\.js"><\/script>\r?\n?/g, () => {
+html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|model-kit|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager|rugged-phone|multimeter-2|air-detector|kindergarten-frame|hikvision-column-speaker|poe-security-switch|nvr|dome-camera|ptz-camera|poe-switch-8|fiber-odf|monitor-4k|video-server|security-platform|ip-intercom|paging-microphone)\.js"><\/script>\r?\n?/g, () => {
   removed++;
   return '';
 });
-if (removed !== 13) {
-  console.error('index.html 里的外部脚本标签数量异常(期望 13 个,实际 ' + removed + ' 个)');
+if (removed !== 24) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 24 个,实际 ' + removed + ' 个)');
   process.exit(1);
 }
 

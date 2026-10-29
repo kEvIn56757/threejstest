@@ -1,0 +1,255 @@
+// fiber-odf.js — 24 口 LC 双工光纤配线架（ODF）
+// 19" 1U 机架式，2×12 LC 双工适配器、48 芯熔接盘、黄色单模尾纤与理线环。
+// 单位：厘米(cm)。外形 44 × 4.4 × 30。front +Z，root 旋转 180°。
+function buildFiberODF(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'FiberODF24';
+
+  const baseGroup = new THREE.Group(); baseGroup.name = 'OdfBaseGroup';
+  const coverGroup = new THREE.Group(); coverGroup.name = 'OdfCoverGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'OdfFrontGroup';
+  const trayGroup = new THREE.Group(); trayGroup.name = 'OdfSpliceTrayGroup';
+  const patchGroup = new THREE.Group(); patchGroup.name = 'OdfPatchCordsGroup';
+  root.add(baseGroup, coverGroup, frontGroup, trayGroup, patchGroup);
+
+  const W = 44, H = 4.4, D = 30;
+  const hw = W / 2, hh = H / 2, hd = D / 2;
+  const wall = 0.14;
+
+  // ---------- materials ----------
+  const matCase = mat(THREE, 'physical', 'OdfCaseMetal', {
+    color: 0x23272d, metalness: 0.75, roughness: 0.38,
+  });
+  const matCover = mat(THREE, 'physical', 'OdfCoverMetal', {
+    color: 0x282d34, metalness: 0.75, roughness: 0.36,
+  });
+  const matShield = mat(THREE, 'physical', 'OdfNickel', {
+    color: 0xc8d0d6, metalness: 0.9, roughness: 0.22,
+  });
+  const matBlack = mat(THREE, 'standard', 'OdfBlackPlastic', {
+    color: 0x0e1014, metalness: 0.1, roughness: 0.65,
+  });
+  const matBlue = mat(THREE, 'standard', 'OdfLcUpcBlue', {
+    color: 0x1d4ed8, metalness: 0.1, roughness: 0.45,
+  });
+  const matGreen = mat(THREE, 'standard', 'OdfLcApcGreen', {
+    color: 0x15803d, metalness: 0.1, roughness: 0.45,
+  });
+  const matFiber = mat(THREE, 'standard', 'OdfFiberYellow', {
+    color: 0xfacc15, metalness: 0.05, roughness: 0.5,
+  });
+  const matRubber = mat(THREE, 'standard', 'OdfRubber', {
+    color: 0x141619, roughness: 0.9,
+  });
+  const matGold = mat(THREE, 'physical', 'OdfGold', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+
+  // ---------- front silkscreen ----------
+  const PW = W - 0.4, PH = H - 0.3;
+  const CW = 2048, CH = Math.round(CW * PH / PW);
+  const { c: fc, ctx: f } = canvas(CW, CH);
+  const PX = x => (x / PW + 0.5) * CW;
+  const PY = y => (0.5 - y / PH) * CH;
+
+  const g = f.createLinearGradient(0, 0, CW, CH);
+  g.addColorStop(0, '#1c2026'); g.addColorStop(0.5, '#252a31'); g.addColorStop(1, '#191d23');
+  f.fillStyle = g; f.fillRect(0, 0, CW, CH);
+  for (let y = 0; y < CH; y += 3) {
+    f.strokeStyle = 'rgba(255,255,255,0.022)'; f.lineWidth = 1;
+    f.beginPath(); f.moveTo(0, y); f.lineTo(CW, y); f.stroke();
+  }
+  f.fillStyle = '#dc2626'; f.fillRect(PX(-21.6), PY(2.02), PX(21.6) - PX(-21.6), 4);
+
+  label(f, 'HIKVISION', PX(-21.2), PY(1.55), { px: 15, color: '#f8fafc', mono: false });
+  label(f, '24 PORT LC DUPLEX ODF', PX(-21.2), PY(1.15), { px: 9, color: '#94a3b8' });
+  label(f, '48 FIBERS  ·  19" 1U  ·  SM/MM', PX(-21.2), PY(0.78), { px: 8, color: '#64748b' });
+  label(f, '48F', PX(21.2), PY(1.55), { px: 13, color: '#38bdf8', align: 'right' });
+  label(f, 'LC/UPC · LC/APC', PX(21.2), PY(1.15), { px: 8, color: '#94a3b8', align: 'right' });
+
+  // adapter numbers: 2 rows × 12, aligned with 3D adapters
+  const ax = i => -15.4 + i * 2.8;
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 12; i++) {
+      const n = row * 12 + i + 1;
+      label(f, String(n).padStart(2, '0'), PX(ax(i)), PY(row === 0 ? 1.52 : 0.0), {
+        px: 13, color: row === 0 ? '#cbd5e1' : '#94a3b8', align: 'center',
+      });
+    }
+  }
+  label(f, 'SPLICE TRAY  ·  24× HEAT-SHRINK PROTECTOR', PX(0), PY(-1.82), { px: 8, color: '#64748b', align: 'center' });
+
+  const frontTex = canvasTexture(THREE, fc);
+  const matFront = mat(THREE, 'standard', 'OdfFrontSilk', { map: frontTex, roughness: 0.42, metalness: 0.35 });
+
+  // ---------- chassis ----------
+  const uShape = new THREE.Shape();
+  uShape.moveTo(-hw, hh - 0.1);
+  uShape.lineTo(-hw, -hh + 0.1);
+  uShape.quadraticCurveTo(-hw, -hh, -hw + 0.1, -hh);
+  uShape.lineTo(hw - 0.1, -hh);
+  uShape.quadraticCurveTo(hw, -hh, hw, -hh + 0.1);
+  uShape.lineTo(hw, hh - 0.1);
+  uShape.lineTo(hw - wall, hh - 0.1);
+  uShape.lineTo(hw - wall, -hh + wall);
+  uShape.lineTo(-hw + wall, -hh + wall);
+  uShape.lineTo(-hw + wall, hh - 0.1);
+  uShape.closePath();
+  const uGeo = new THREE.ExtrudeGeometry(uShape, {
+    depth: D - 0.3, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  uGeo.translate(0, 0, -(D - 0.3) / 2);
+  const uBody = new THREE.Mesh(uGeo, matCase);
+  uBody.name = 'Odf_UChassis';
+  uBody.castShadow = true; uBody.receiveShadow = true;
+  tag(uBody, '1U U 型下机壳', '冷轧钢板折弯，前面板承托 24 个 LC 双工适配器。', 'Shape + ExtrudeGeometry', 'SECC');
+  baseGroup.add(uBody);
+
+  const coverShape = roundedRectShape(THREE, W - 0.06, D - 0.24, 0.2);
+  const coverGeo = new THREE.ExtrudeGeometry(coverShape, {
+    depth: 0.12, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2,
+  });
+  coverGeo.rotateX(Math.PI / 2);
+  const cover = new THREE.Mesh(coverGeo, matCover);
+  cover.position.y = hh;
+  cover.name = 'Odf_TopCover';
+  cover.castShadow = true;
+  tag(cover, '可拆卸顶盖', '顶盖可拆，露出熔接盘与盘纤区。', 'Shape + ExtrudeGeometry', 'SECC');
+  coverGroup.add(cover);
+
+  // rack ears
+  for (const side of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.24, H - 0.12, 5.5), matCase);
+    ear.position.set(side * (hw + 0.12), 0, hd - 2.75);
+    baseGroup.add(ear);
+    const flange = new THREE.Mesh(new THREE.BoxGeometry(2.0, H - 0.12, 0.24), matCase);
+    flange.position.set(side * (hw - 0.9), 0, hd - 0.12);
+    baseGroup.add(flange);
+    for (const sy of [-1.4, 1.4]) {
+      const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.1, 10), matShield);
+      sc.rotation.x = Math.PI / 2;
+      sc.position.set(side * (hw - 0.9), sy, hd + 0.02);
+      baseGroup.add(sc);
+    }
+  }
+
+  // ---------- front panel ----------
+  const frontZ = hd;
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), matFront);
+  face.position.set(0, 0, frontZ + 0.06);
+  face.name = 'Odf_FrontPanel';
+  tag(face, '前面板丝印', '品牌、端口编号、光纤类型与熔接盘标识。', 'PlaneGeometry + CanvasTexture', 'Silkscreen');
+  frontGroup.add(face);
+
+  // 24 LC duplex adapters (2 rows × 12)
+  const adapterGeo = new THREE.BoxGeometry(1.15, 0.86, 1.35);
+  const portGeo = new THREE.BoxGeometry(0.38, 0.3, 1.42);
+  const portInnerGeo = new THREE.BoxGeometry(0.24, 0.18, 1.46);
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 12; i++) {
+      const n = row * 12 + i + 1;
+      const x = ax(i);
+      const y = row === 0 ? 0.85 : -0.85;
+      const adapter = new THREE.Mesh(adapterGeo, row === 0 ? matBlue : matGreen);
+      adapter.position.set(x, y, frontZ - 0.35);
+      adapter.name = `Odf_LcAdapter_${n}`;
+      tag(adapter, `LC 双工适配器 #${n}`, '陶瓷套管 LC 双工法兰，蓝色 UPC / 绿色 APC。', 'BoxGeometry', 'PBT + Ceramic');
+      frontGroup.add(adapter);
+
+      for (const dx of [-0.25, 0.25]) {
+        const port = new THREE.Mesh(portGeo, matShield);
+        port.position.set(x + dx, y, frontZ + 0.35);
+        const inner = new THREE.Mesh(portInnerGeo, matBlack);
+        inner.position.set(x + dx, y, frontZ + 0.38);
+        frontGroup.add(port, inner);
+      }
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 8), matRubber);
+      cap.rotation.x = Math.PI / 2;
+      cap.position.set(x, y - 0.25, frontZ + 0.6);
+      frontGroup.add(cap);
+    }
+  }
+
+  // ---------- internal splice tray ----------
+  const trayBase = new THREE.Mesh(new THREE.BoxGeometry(38, 0.35, 22), matShield);
+  trayBase.position.set(0, -1.45, -0.5);
+  trayBase.name = 'Odf_SpliceTray';
+  tag(trayBase, '24 芯熔接盘', '可翻转熔接盘，容纳 24 个热缩保护管与盘纤。', 'BoxGeometry', 'ABS + Steel');
+  trayGroup.add(trayBase);
+
+  const trayCover = new THREE.Mesh(new THREE.BoxGeometry(34, 0.2, 18), matBlack);
+  trayCover.position.set(0, -1.2, -0.5);
+  trayGroup.add(trayCover);
+
+  // coiled fibers on tray
+  for (let c = 0; c < 4; c++) {
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(5.5 + c * 0.6, 0.12, 8, 40), matFiber);
+    coil.rotation.x = Math.PI / 2;
+    coil.position.set(-7 + c * 1.0, -1.0, -2.5);
+    trayGroup.add(coil);
+  }
+
+  // heat-shrink protectors
+  const hsGeo = new THREE.CylinderGeometry(0.11, 0.11, 3.2, 8);
+  hsGeo.rotateZ(Math.PI / 2);
+  for (let i = 0; i < 12; i++) {
+    const hs = new THREE.Mesh(hsGeo, matBlack);
+    hs.position.set(-11 + i * 1.6, -0.98, 2.8);
+    trayGroup.add(hs);
+  }
+
+  // adapter mounting plate (behind front panel)
+  const mount = new THREE.Mesh(new THREE.BoxGeometry(40, 3.6, 0.25), matCase);
+  mount.position.set(0, 0, frontZ - 1.2);
+  frontGroup.add(mount);
+
+  // rear cable entry + strength member clamp
+  const rearZ = -hd;
+  const grommet = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.6, 20), matRubber);
+  grommet.rotation.x = Math.PI / 2;
+  grommet.position.set(-8, -0.9, rearZ + 0.2);
+  trayGroup.add(grommet);
+
+  const clamp = new THREE.Mesh(new THREE.BoxGeometry(6, 0.8, 1.2), matShield);
+  clamp.position.set(-8, -1.6, rearZ + 1.4);
+  trayGroup.add(clamp);
+
+  // ---------- front patch cords ----------
+  for (let i = 0; i < 8; i++) {
+    const x = ax(i * 1.5 < 12 ? i * 1.5 : 11) + (i % 2) * 0.3;
+    const y0 = i % 2 === 0 ? 0.85 : -0.85;
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(x, y0, frontZ + 0.7),
+      new THREE.Vector3(x, y0 - 0.5, frontZ + 2.6),
+      new THREE.Vector3(x + 0.6, -1.6, frontZ + 3.8),
+      new THREE.Vector3(x + 1.2, -2.4, frontZ + 4.6),
+    ]);
+    const cord = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.09, 8, false), matFiber);
+    cord.name = `Odf_PatchCord_${i + 1}`;
+    patchGroup.add(cord);
+  }
+
+  // front horizontal cable management bar + rings
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(34, 0.35, 0.35), matShield);
+  bar.position.set(0, -1.85, frontZ + 2.2);
+  patchGroup.add(bar);
+  for (const rx of [-12, -4, 4, 12]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.08, 8, 20), matShield);
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(rx, -1.85, frontZ + 2.2);
+    patchGroup.add(ring);
+  }
+
+  markShell(coverGroup);
+  markShell(baseGroup);
+  trayGroup.visible = false;   // 默认只看外观，点「查看内部」再显示熔接盘
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { baseGroup, coverGroup, frontGroup, trayGroup, patchGroup },
+    onShellToggle: (on) => { trayGroup.visible = !on; },
+  };
+  return root;
+}

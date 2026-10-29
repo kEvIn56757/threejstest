@@ -81272,6 +81272,93 @@ function exportGLB(scene, opts = {}) {
   return new Uint8Array(out);
 }
 
+// model-kit.js — 新模型共享工具（全局 MK 命名空间）
+// 所有新增模型通过 MK.* 取用，避免各模型文件在单文件构建时顶层标识符冲突。
+const MK = (() => {
+  // three r152+ 使用 colorSpace；旧 sRGBEncoding 已移除
+  function applyColorSpace(tex, THREE) {
+    if (!tex) return tex;
+    if ('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  // 圆角矩形轮廓（XY 平面，中心在原点）
+  function roundedRectShape(THREE, w, h, r) {
+    const s = new THREE.Shape();
+    const hw = w / 2, hh = h / 2;
+    const cr = Math.min(r, hw, hh);
+    s.moveTo(-hw + cr, -hh);
+    s.lineTo(hw - cr, -hh);
+    s.quadraticCurveTo(hw, -hh, hw, -hh + cr);
+    s.lineTo(hw, hh - cr);
+    s.quadraticCurveTo(hw, hh, hw - cr, hh);
+    s.lineTo(-hw + cr, hh);
+    s.quadraticCurveTo(-hw, hh, -hw, hh - cr);
+    s.lineTo(-hw, -hh + cr);
+    s.quadraticCurveTo(-hw, -hh, -hw + cr, -hh);
+    return s;
+  }
+
+  // 带挖孔的圆角矩形面板（用于前面板/屏幕边框）
+  function roundedRectWithHole(THREE, w, h, r, iw, ih, ir) {
+    const outer = roundedRectShape(THREE, w, h, r);
+    if (iw && ih) outer.holes.push(roundedRectShape(THREE, iw, ih, ir || r));
+    return outer;
+  }
+
+  function canvasTexture(THREE, canvas) {
+    const t = new THREE.CanvasTexture(canvas);
+    return applyColorSpace(t, THREE);
+  }
+
+  function tag(mesh, title, desc, geo, mat) {
+    mesh.userData = Object.assign(mesh.userData || {}, {
+      partTitle: title,
+      partDesc: desc,
+      geoType: geo,
+      matType: mat,
+    });
+    return mesh;
+  }
+
+  function canvas(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return { c, ctx: c.getContext('2d') };
+  }
+
+  function label(ctx, str, x, y, opt) {
+    const o = opt || {};
+    ctx.save();
+    ctx.font = (o.weight || 'bold') + ' ' + (o.px || 12) + 'px ' +
+      (o.mono === false ? 'Inter, Arial, sans-serif' : '"JetBrains Mono", monospace');
+    ctx.fillStyle = o.color || '#cbd5e1';
+    ctx.textAlign = o.align || 'left';
+    ctx.textBaseline = o.baseline || 'middle';
+    ctx.fillText(str, x, y);
+    ctx.restore();
+  }
+
+  // 常用材质工厂：统一命名，导出后在 Blender / Unity 里好认
+  function mat(THREE, type, name, params) {
+    const M = type === 'physical' ? THREE.MeshPhysicalMaterial
+      : type === 'basic' ? THREE.MeshBasicMaterial
+        : THREE.MeshStandardMaterial;
+    const m = new M(params || {});
+    m.name = name;
+    return m;
+  }
+
+  // 给一组网格统一打 shell 标记
+  function markShell(group) {
+    group.traverse(o => { if (o.isMesh) o.userData.shell = true; });
+    return group;
+  }
+
+  return { applyColorSpace, roundedRectShape, roundedRectWithHole, canvasTexture, tag, canvas, label, mat, markShell };
+})();
+
 // ronk-ups.js — RONK 新H型系列工频/高频在线式 UPS 机柜
 // 单位:厘米(cm)。外形 34(宽 Z) × 72(深 X) × 85.5(高 Y)。
 // 朝向:前面板朝 +X,侧面 ±Z,后面板 −X。
@@ -87253,6 +87340,3379 @@ function buildPoeSecuritySwitch(THREE, userOpts) {
 
       return root;
     }
+// nvr.js — 4 盘位网络视频录像机 (NVR) 程序化模型
+// 视频安防系统中的 NVR：机架式 2U 金属机箱，4 个 SATA 硬盘热插拔盘位，
+// 前置 5 寸预览液晶与状态指示灯，后置 HDMI/VGA/USB/网口/报警端子/电源。
+// 单位：厘米(cm)。外形 44(宽 X) × 8.8(高 Y) × 40(深 Z)。
+// 朝向：前面板朝 +Z，侧面 ±X，后面板 −Z；root 最终绕 Y 转 180° 让正面朝向观察者。
+// 支持「查看内部」：顶盖 + U 型下机壳标为 shell，隐藏后露出主板/硬盘/电源/散热器。
+
+function nvrApplyColorSpace(tex, THREE) {
+  if (!tex) return tex;
+  if ('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function nvrRoundedRectShape(THREE, w, h, r) {
+  const shape = new THREE.Shape();
+  const hw = w / 2, hh = h / 2;
+  const cr = Math.min(r, hw, hh);
+  shape.moveTo(-hw + cr, -hh);
+  shape.lineTo(hw - cr, -hh);
+  shape.quadraticCurveTo(hw, -hh, hw, -hh + cr);
+  shape.lineTo(hw, hh - cr);
+  shape.quadraticCurveTo(hw, hh, hw - cr, hh);
+  shape.lineTo(-hw + cr, hh);
+  shape.quadraticCurveTo(-hw, hh, -hw, hh - cr);
+  shape.lineTo(-hw, -hh + cr);
+  shape.quadraticCurveTo(-hw, -hh, -hw + cr, -hh);
+  return shape;
+}
+
+function createFrontPanelTexture(THREE) {
+  // 画布比例必须与面板平面一致(43.6 × 8.4 cm),否则文字会被横向/纵向拉伸,
+  // 而且文字坐标要和 3D 硬件位置对得上,所以统一用「模型局部厘米」换算像素。
+  const PLANE_W = 43.6, PLANE_H = 8.4;
+  const CW = 2048, CH = Math.round(CW * PLANE_H / PLANE_W);   // ≈ 395
+  const canvas = document.createElement('canvas');
+  canvas.width = CW; canvas.height = CH;
+  const ctx = canvas.getContext('2d');
+
+  const PX = x => (x / PLANE_W + 0.5) * CW;
+  const PY = y => (0.5 - y / PLANE_H) * CH;
+
+  // 深灰拉丝底
+  const grad = ctx.createLinearGradient(0, 0, CW, CH);
+  grad.addColorStop(0, '#1f2329'); grad.addColorStop(0.5, '#252a31'); grad.addColorStop(1, '#1b1f24');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, CW, CH);
+
+  // 细拉丝纹理
+  ctx.strokeStyle = 'rgba(255,255,255,0.02)'; ctx.lineWidth = 1;
+  for (let y = 0; y < CH; y += 3) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  // 顶部安防红装饰条
+  ctx.fillStyle = '#dc2626';
+  ctx.fillRect(PX(-21.8), PY(4.16), PX(21.8) - PX(-21.8), 5);
+
+  const text = (str, x, y, opt) => {
+    const o = opt || {};
+    ctx.save();
+    ctx.font = (o.weight || 'bold') + ' ' + (o.px || 14) + 'px ' +
+      (o.mono === false ? 'Inter, Arial, sans-serif' : '"JetBrains Mono", monospace');
+    ctx.fillStyle = o.color || '#cbd5e1';
+    ctx.textAlign = o.align || 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(str, PX(x), PY(y));
+    ctx.restore();
+  };
+
+  // —— 顶部品牌带(y > 3.15,硬件最高只到 3.1,不会压字) ——
+  text('HIKVISION', -21.6, 3.70, { px: 30, color: '#f8fafc', mono: false });
+  text('DS-7732NI-K4  ·  32-CH NVR  ·  4×SATA', -17.2, 3.68, { px: 14, color: '#94a3b8' });
+  text('4K H.265+  ·  PoE 8-port  ·  2U Rack', 21.6, 3.68, { px: 13, color: '#94a3b8', align: 'right' });
+
+  // —— 左侧状态灯标签(与 3D LED 同坐标: x=-20.6, y=2.2-i*0.52) ——
+  const ledNames = ['PWR', 'SYS', 'NET', 'ALM', 'HDD1', 'HDD2', 'HDD3', 'HDD4'];
+  ledNames.forEach((lbl, i) => {
+    text(lbl, -19.9, 2.2 - i * 0.52, { px: 9, color: '#94a3b8' });
+  });
+  text('USB 3.0', -17.2, -2.32, { px: 8, color: '#0ea5e9', align: 'center' });
+
+  // —— 底部资产铭牌(y < -3.8,电源/USB 最低到 -3.7) ——
+  text('CE · FCC · RoHS · 100-240V~ 50/60Hz 4.0A MAX · ASSET: SEC-BLDG-A3-RACK02-NVR01',
+    0, -4.00, { px: 10, color: '#64748b', align: 'center' });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  return nvrApplyColorSpace(tex, THREE);
+}
+
+function createRearPanelTexture(THREE) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#181c24'; ctx.fillRect(0, 0, 2048, 512);
+
+  const X = wx => (0.5 - wx / 44) * canvas.width;   // 世界 X -> 画布 (镜像)
+  const Y = wy => (0.5 - wy / 8.8) * canvas.height;
+  const label = (text, wx, wy, opt) => {
+    const o = opt || {};
+    ctx.save();
+    ctx.font = (o.weight || 'bold') + ' ' + (o.px || 13) + 'px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillStyle = o.color || '#cbd5e1';
+    ctx.textAlign = o.align || 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, X(wx), Y(wy));
+    ctx.restore();
+  };
+
+  // 端口区标签
+  label('HDMI 1 (MAIN)', -18.5, 2.6, { px: 12, color: '#e2e8f0' });
+  label('HDMI 2 (SPOT)', -14.0, 2.6, { px: 12, color: '#e2e8f0' });
+  label('VGA', -9.5, 2.6, { px: 12, color: '#e2e8f0' });
+  label('USB 2.0 ×2', -5.0, 2.6, { px: 12, color: '#e2e8f0' });
+  label('RJ45 LAN1 (PoE)', 0.5, 2.6, { px: 12, color: '#38bdf8' });
+  label('RJ45 LAN2', 5.0, 2.6, { px: 12, color: '#38bdf8' });
+  label('eSATA', 9.0, 2.6, { px: 12, color: '#f59e0b' });
+  label('AUDIO IN/OUT', 13.5, 2.6, { px: 12, color: '#a78bfa' });
+  label('ALARM I/O (16 in / 4 out)', 18.5, 2.6, { px: 11, color: '#ef4444' });
+
+  // 下排硬件(电源/开关/风扇)上方留有一条空带,标签放这里,避免压在硬件上
+  label('AC INPUT  100-240V~  4.0A', -17.0, -0.95, { px: 13, color: '#e2e8f0' });
+  label('POWER', -12.5, -0.95, { px: 13, color: '#e2e8f0' });
+  label('EXHAUST FAN ×2', -4.0, -0.95, { px: 13, color: '#94a3b8' });
+  label('SERIAL: NS202610290011A', 6.0, -0.95, { px: 12, color: '#94a3b8' });
+  label('6kV SURGE PROT.', 13.0, -0.95, { px: 12, color: '#facc15' });
+
+  // 接地符号
+  const gx = X(18.5), gy = Y(-0.2);
+  ctx.save();
+  ctx.strokeStyle = '#facc15'; ctx.lineWidth = Math.max(2, 44 / 44 * 2);
+  ctx.lineCap = 'round';
+  [[0.3, -0.12], [0.2, 0.12], [0.1, 0.34]].forEach(([half, dy]) => {
+    const y0 = gy + dy * (canvas.height / 8.8);
+    ctx.beginPath();
+    ctx.moveTo(gx - half * (canvas.width / 44), y0);
+    ctx.lineTo(gx + half * (canvas.width / 44), y0);
+    ctx.stroke();
+  });
+  ctx.restore();
+  label('GND', 20.2, -0.2, { px: 12, color: '#facc15' });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  return nvrApplyColorSpace(tex, THREE);
+}
+
+function createLcdTexture(THREE) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#05080e'; ctx.fillRect(0, 0, 640, 360);
+  // 4 grid
+  const chColors = ['#22c55e', '#3b82f6', '#f59e0b', '#a78bfa'];
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 2; c++) {
+      const gx = c * 320, gy = r * 180;
+      ctx.fillStyle = '#0a1018'; ctx.fillRect(gx + 2, gy + 2, 316, 176);
+      // 模拟画面：渐变 + 噪点
+      const g = ctx.createLinearGradient(gx, gy, gx + 316, gy + 176);
+      g.addColorStop(0, 'rgba(30,40,55,0.6)'); g.addColorStop(1, 'rgba(10,14,20,0.9)');
+      ctx.fillStyle = g; ctx.fillRect(gx + 2, gy + 2, 316, 176);
+      ctx.strokeStyle = 'rgba(56,189,248,0.4)'; ctx.lineWidth = 1;
+      ctx.strokeRect(gx + 2, gy + 2, 316, 176);
+      ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 14px "JetBrains Mono", monospace';
+      ctx.fillText(`CH ${r * 2 + c + 1}`, gx + 10, gy + 20);
+      ctx.fillStyle = '#ef4444'; ctx.font = 'bold 12px "JetBrains Mono", monospace';
+      ctx.fillText('● REC  25fps  4K', gx + 200, gy + 20);
+      // 简单"场景"几何：几条线模拟画面内容
+      ctx.strokeStyle = 'rgba(148,163,184,0.25)'; ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(gx + 20, gy + 60 + i * 30);
+        ctx.lineTo(gx + 290, gy + 50 + i * 25);
+        ctx.stroke();
+      }
+    }
+  }
+  // 中央十字分割线
+  ctx.strokeStyle = 'rgba(56,189,248,0.6)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(320, 0); ctx.lineTo(320, 360); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, 180); ctx.lineTo(640, 180); ctx.stroke();
+  const tex = new THREE.CanvasTexture(canvas);
+  return nvrApplyColorSpace(tex, THREE);
+}
+
+function buildNVR(THREE) {
+  const root = new THREE.Group();
+  root.name = 'NVR_4Bay';
+
+  // Sub-groups
+  const chassisBaseGroup = new THREE.Group(); chassisBaseGroup.name = 'ChassisBaseGroup';
+  const topCoverGroup = new THREE.Group(); topCoverGroup.name = 'TopCoverGroup';
+  const frontPanelGroup = new THREE.Group(); frontPanelGroup.name = 'FrontPanelGroup';
+  const rearPanelGroup = new THREE.Group(); rearPanelGroup.name = 'RearPanelGroup';
+  const rackEarsGroup = new THREE.Group(); rackEarsGroup.name = 'RackEarsGroup';
+  const internalsGroup = new THREE.Group(); internalsGroup.name = 'InternalsGroup';
+  const hddGroup = new THREE.Group(); hddGroup.name = 'HddGroup';
+  root.add(chassisBaseGroup, topCoverGroup, frontPanelGroup, rearPanelGroup, rackEarsGroup, internalsGroup, hddGroup);
+
+  // Materials
+  const matChassis = new THREE.MeshPhysicalMaterial({ name: 'ChassisPowderCoatMat', color: 0x1a1d22, metalness: 0.7, roughness: 0.45, clearcoat: 0.12 });
+  const matTopCover = new THREE.MeshPhysicalMaterial({ name: 'TopCoverMat', color: 0x1e2228, metalness: 0.7, roughness: 0.42, clearcoat: 0.14 });
+  const matRackEar = new THREE.MeshPhysicalMaterial({ name: 'RackEarSteelMat', color: 0x16191e, metalness: 0.8, roughness: 0.38 });
+  const matFrontBezel = new THREE.MeshPhysicalMaterial({ name: 'FrontBezelMat', color: 0x14171c, metalness: 0.55, roughness: 0.4 });
+  const matBlackPlastic = new THREE.MeshStandardMaterial({ name: 'BlackPlasticMat', color: 0x0f1114, roughness: 0.7, metalness: 0.1 });
+  const matShield = new THREE.MeshPhysicalMaterial({ name: 'ShieldNickelMat', color: 0xcbd5e1, metalness: 0.9, roughness: 0.22 });
+  const matGold = new THREE.MeshPhysicalMaterial({ name: 'GoldContactMat', color: 0xfbbf24, metalness: 0.95, roughness: 0.15 });
+  const matCopper = new THREE.MeshPhysicalMaterial({ name: 'CopperBrassMat', color: 0xd97706, metalness: 0.9, roughness: 0.25 });
+  const matRubber = new THREE.MeshStandardMaterial({ name: 'RubberMat', color: 0x0a0b0d, roughness: 0.9 });
+  const matHeatsink = new THREE.MeshPhysicalMaterial({ name: 'HeatsinkAlumMat', color: 0x2a2f36, metalness: 0.85, roughness: 0.3 });
+  const matPcb = new THREE.MeshStandardMaterial({ name: 'PcbMat', color: 0x0b3d2a, roughness: 0.6, metalness: 0.15 });
+  const matHdd = new THREE.MeshPhysicalMaterial({ name: 'HddCaseMat', color: 0x2a2e34, metalness: 0.6, roughness: 0.45 });
+  const matHddLabel = new THREE.MeshStandardMaterial({ name: 'HddLabelMat', color: 0x94a3b8, roughness: 0.5 });
+  const matPsu = new THREE.MeshPhysicalMaterial({ name: 'PsuAlumMat', color: 0x94a3b8, metalness: 0.85, roughness: 0.32 });
+  const matGlass = new THREE.MeshPhysicalMaterial({ name: 'LcdGlassMat', color: 0xffffff, transparent: true, opacity: 0.07, roughness: 0.12, clearcoat: 0.5 });
+
+  // Dimensions (cm)
+  const W = 44.0, H = 8.8, D = 40.0;
+  const wallT = 0.16;
+  const hw = W / 2, hh = H / 2, hd = D / 2;
+
+  function tagPart(mesh, title, desc, geoName, matName) {
+    mesh.userData = Object.assign(mesh.userData || {}, { partTitle: title, partDesc: desc, geoType: geoName, matType: matName });
+    return mesh;
+  }
+
+  // -----------------------------------------------------------------------
+  // 1. U-CHASSIS BODY
+  // -----------------------------------------------------------------------
+  const uShape = new THREE.Shape();
+  uShape.moveTo(-hw, hh - 0.12);
+  uShape.lineTo(-hw, -hh + 0.1);
+  uShape.quadraticCurveTo(-hw, -hh, -hw + 0.1, -hh);
+  uShape.lineTo(hw - 0.1, -hh);
+  uShape.quadraticCurveTo(hw, -hh, hw, -hh + 0.1);
+  uShape.lineTo(hw, hh - 0.12);
+  uShape.lineTo(hw - wallT, hh - 0.12);
+  uShape.lineTo(hw - wallT, -hh + wallT);
+  uShape.lineTo(-hw + wallT, -hh + wallT);
+  uShape.lineTo(-hw + wallT, hh - 0.12);
+  uShape.closePath();
+  const uExtrude = new THREE.ExtrudeGeometry(uShape, { depth: D - 0.4, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2 });
+  uExtrude.translate(0, 0, -(D - 0.4) / 2);
+  const uChassis = new THREE.Mesh(uExtrude, matChassis);
+  uChassis.name = 'Chassis_UBody';
+  uChassis.castShadow = true; uChassis.receiveShadow = true;
+  tagPart(uChassis, '2U 钢制 U 型下机壳', '冷轧钢板折弯 U 型下机壳，表面深灰静电粉末烤漆，提供结构刚性与 EMI 屏蔽。', 'Shape+ExtrudeGeometry', 'PowderCoat');
+  chassisBaseGroup.add(uChassis);
+
+  // 4 橡胶脚垫
+  const footGeo = new THREE.CylinderGeometry(0.9, 0.8, 0.28, 20);
+  [[-hw + 4, -hh - 0.14, D / 2 - 4], [hw - 4, -hh - 0.14, D / 2 - 4],
+   [-hw + 4, -hh - 0.14, -D / 2 + 4], [hw - 4, -hh - 0.14, -D / 2 + 4]].forEach((fc, i) => {
+    const foot = new THREE.Mesh(footGeo, matRubber);
+    foot.position.set(fc[0], fc[1], fc[2]);
+    foot.name = `RubberFoot_${i + 1}`;
+    chassisBaseGroup.add(foot);
+  });
+
+  // -----------------------------------------------------------------------
+  // 2. TOP COVER (shell)
+  // -----------------------------------------------------------------------
+  const topShape = nvrRoundedRectShape(THREE, W - 0.1, D - 0.3, 0.22);
+  const topExtrude = new THREE.ExtrudeGeometry(topShape, { depth: 0.14, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2 });
+  topExtrude.rotateX(Math.PI / 2);
+  const topCover = new THREE.Mesh(topExtrude, matTopCover);
+  topCover.position.set(0, hh, 0);
+  topCover.name = 'TopCover_Lid';
+  topCover.castShadow = true; topCover.receiveShadow = true;
+  tagPart(topCover, '可拆卸顶盖板', '顶盖带冲孔散热格栅与加强筋，支持透视/爆炸拆解查看内部。', 'Shape+ExtrudeGeometry', 'PowderCoat');
+  topCoverGroup.add(topCover);
+
+  // 顶盖加强筋
+  const ribGeo = new THREE.BoxGeometry(12, 0.05, 0.4);
+  for (let r = -1; r <= 1; r += 2) {
+    for (let z = -10; z <= 10; z += 10) {
+      const rib = new THREE.Mesh(ribGeo, matTopCover);
+      rib.position.set(r * 12, hh + 0.03, z);
+      topCoverGroup.add(rib);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 3. RACK EARS
+  // -----------------------------------------------------------------------
+  const screwHeadGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.08, 12);
+  screwHeadGeo.rotateZ(Math.PI / 2);
+  for (let side of [-1, 1]) {
+    const earGroup = new THREE.Group();
+    earGroup.name = side < 0 ? 'RackEar_Left' : 'RackEar_Right';
+    const sidePlate = new THREE.Mesh(new THREE.BoxGeometry(0.24, H - 0.12, 6), matRackEar);
+    sidePlate.position.set(side * (hw + 0.12), 0, D / 2 - 3.2);
+    tagPart(sidePlate, '19 英寸机柜挂耳侧板', '冷轧钢折弯挂耳侧板。', 'BoxGeometry', 'HeavySteel');
+    earGroup.add(sidePlate);
+
+    const flangeShape = new THREE.Shape();
+    const fw = 2.0, fh = H - 0.12;
+    flangeShape.moveTo(0, -fh / 2);
+    flangeShape.lineTo(fw - 0.18, -fh / 2);
+    flangeShape.quadraticCurveTo(fw, -fh / 2, fw, -fh / 2 + 0.18);
+    flangeShape.lineTo(fw, fh / 2 - 0.18);
+    flangeShape.quadraticCurveTo(fw, fh / 2, fw - 0.18, fh / 2);
+    flangeShape.lineTo(0, fh / 2);
+    flangeShape.closePath();
+    for (let hy of [-1.6, 1.6]) {
+      const hole = new THREE.Path();
+      hole.absellipse(1.0, hy, 0.4, 0.24, 0, Math.PI * 2, false, 0);
+      flangeShape.holes.push(hole);
+    }
+    const flangeGeo = new THREE.ExtrudeGeometry(flangeShape, { depth: 0.24, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 });
+    const flange = new THREE.Mesh(flangeGeo, matRackEar);
+    if (side < 0) { flange.rotation.y = Math.PI; flange.position.set(-hw, 0, D / 2 - 0.12); }
+    else { flange.position.set(hw, 0, D / 2 - 0.36); }
+    earGroup.add(flange);
+
+    for (let sz of [D / 2 - 1.2, D / 2 - 3.0, D / 2 - 4.8]) {
+      for (let sy of [-1.0, 1.0]) {
+        const sc = new THREE.Mesh(screwHeadGeo, matShield);
+        sc.position.set(side * (hw + 0.26), sy, sz);
+        earGroup.add(sc);
+      }
+    }
+    rackEarsGroup.add(earGroup);
+  }
+
+  // -----------------------------------------------------------------------
+  // 4. FRONT PANEL
+  // -----------------------------------------------------------------------
+  const frontZ = D / 2;
+  const frontBezelShape = nvrRoundedRectShape(THREE, W + 0.04, H + 0.02, 0.18);
+  const frontBezelGeo = new THREE.ExtrudeGeometry(frontBezelShape, { depth: 0.35, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3 });
+  frontBezelGeo.translate(0, 0, -0.18);
+  const frontBezel = new THREE.Mesh(frontBezelGeo, matFrontBezel);
+  frontBezel.position.set(0, 0, frontZ);
+  frontBezel.name = 'FrontBezel';
+  frontBezel.castShadow = true;
+  tagPart(frontBezel, '前面板装饰边框', '带倒角的铝合金/工程塑胶前面板总成。', 'ExtrudeGeometry', 'FrontBezel');
+  frontPanelGroup.add(frontBezel);
+
+  // 丝印面板
+  const frontSilkTex = createFrontPanelTexture(THREE);
+  const frontSilkMat = new THREE.MeshStandardMaterial({ name: 'FrontSilkscreenMat', map: frontSilkTex, roughness: 0.38, metalness: 0.35 });
+  const faceplate = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.4, H - 0.4), frontSilkMat);
+  faceplate.position.set(0, 0, frontZ + 0.22);
+  faceplate.name = 'FrontPanel_Silkscreen';
+  tagPart(faceplate, '前面板 2K 丝印', 'Canvas 生成的前面板丝印：品牌/型号/状态灯/USB/电源/硬盘盘位/LCD 预览区。', 'PlaneGeometry+CanvasTexture', 'Silkscreen');
+  frontPanelGroup.add(faceplate);
+
+  // 电源按钮(深色按钮 + 绿色指示灯环,避免与 USB 口重叠)
+  const pwrRing = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.16, 24), matShield);
+  pwrRing.rotation.x = Math.PI / 2;
+  pwrRing.position.set(-19.8, -2.5, frontZ + 0.28);
+  const pwrBtn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.48, 0.48, 0.22, 20),
+    new THREE.MeshStandardMaterial({ color: 0x1a1d22, emissive: 0x0b3d1f, emissiveIntensity: 0.5, roughness: 0.35 })
+  );
+  pwrBtn.rotation.x = Math.PI / 2;
+  pwrBtn.position.set(-19.8, -2.5, frontZ + 0.36);
+  pwrBtn.name = 'PowerButton';
+  const pwrLed = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.2, roughness: 0.2 })
+  );
+  pwrLed.rotation.x = Math.PI / 2;
+  pwrLed.position.set(-19.8, -2.5, frontZ + 0.48);
+  frontPanelGroup.add(pwrRing, pwrBtn, pwrLed);
+
+  // 状态 LED 点
+  const ledColors = [0x22c55e, 0x3b82f6, 0x06b6d4, 0xef4444, 0xf59e0b, 0xf59e0b, 0xf59e0b, 0xf59e0b];
+  ledColors.forEach((col, i) => {
+    const led = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.0, roughness: 0.2 }));
+    led.rotation.x = Math.PI / 2;
+    led.position.set(-20.6, 2.2 - i * 0.52, frontZ + 0.28);
+    led.name = `StatusLED_${i + 1}`;
+    frontPanelGroup.add(led);
+  });
+
+  // USB 3.0 口
+  const usbHousing = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.6), matShield);
+  usbHousing.position.set(-17.2, -3.0, frontZ + 0.12);
+  const usbHole = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.7), matBlackPlastic);
+  usbHole.position.set(-17.2, -3.0, frontZ + 0.28);
+  frontPanelGroup.add(usbHousing, usbHole);
+
+  // 前置 5 寸 LCD 预览屏
+  const lcdTex = createLcdTexture(THREE);
+  const lcdHousing = new THREE.Mesh(new THREE.BoxGeometry(9.0, 5.4, 0.5), matBlackPlastic);
+  lcdHousing.position.set(-6.5, -0.3, frontZ + 0.18);
+  const lcdScreenMat = new THREE.MeshBasicMaterial({ name: 'LcdPreviewMat', map: lcdTex });
+  const lcdScreen = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 4.6), lcdScreenMat);  // 16:9
+  lcdScreen.position.set(-6.5, -0.3, frontZ + 0.46);
+  const lcdGlass = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 4.8), matGlass);
+  lcdGlass.position.set(-6.5, -0.3, frontZ + 0.48);
+  tagPart(lcdScreen, '前置 5 寸预览液晶', '实时 4 分屏预览画面，Canvas 生成模拟画面。', 'PlaneGeometry+CanvasTexture', 'LCD');
+  frontPanelGroup.add(lcdHousing, lcdScreen, lcdGlass);
+
+  // 4 个硬盘热插拔盘位
+  const bayW = 9.2, bayH = 2.4;
+  for (let i = 0; i < 4; i++) {
+    const col = i % 2, row = Math.floor(i / 2);
+    const bx = 6.2 + col * 10.2;
+    const by = 1.9 - row * 3.0;
+    const bayFrame = new THREE.Mesh(new THREE.BoxGeometry(bayW, bayH, 0.6), matShield);
+    bayFrame.position.set(bx, by, frontZ + 0.18);
+    const bayDoor = new THREE.Mesh(new THREE.BoxGeometry(bayW - 0.4, bayH - 0.4, 0.25), matBlackPlastic);
+    bayDoor.position.set(bx, by, frontZ + 0.55);
+    const bayHandle = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.35), matShield);
+    bayHandle.position.set(bx + bayW / 2 - 0.6, by, frontZ + 0.72);
+    const bayLed = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12), new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.0, roughness: 0.2 }));
+    bayLed.rotation.x = Math.PI / 2;
+    bayLed.position.set(bx - bayW / 2 + 0.5, by + bayH / 2 - 0.4, frontZ + 0.72);
+    tagPart(bayDoor, `HDD ${i + 1} 热插拔盘位门`, '3.5 英寸 SATA 硬盘热插拔托架与锁扣把手。', 'BoxGeometry', 'Hot-Swap Tray');
+    frontPanelGroup.add(bayFrame, bayDoor, bayHandle, bayLed);
+  }
+
+  // -----------------------------------------------------------------------
+  // 5. REAR PANEL
+  // -----------------------------------------------------------------------
+  const rearZ = -D / 2;
+  const rearSilkTex = createRearPanelTexture(THREE);
+  const rearPlateMat = new THREE.MeshStandardMaterial({ name: 'RearPanelSilkscreenMat', map: rearSilkTex, roughness: 0.45, metalness: 0.65 });
+  const rearPlate = new THREE.Mesh(new THREE.BoxGeometry(W - 0.16, H - 0.16, 0.22), rearPlateMat);
+  rearPlate.position.set(0, 0, rearZ + 0.11);
+  rearPlate.name = 'RearPanel_MainPlate';
+  tagPart(rearPlate, '后面板总成', '集成 HDMI/VGA/USB/RJ45/eSATA/音频/报警/电源/风扇/接地。', 'BoxGeometry+CanvasTexture', 'RearPanel');
+  rearPanelGroup.add(rearPlate);
+
+  // HDMI ×2
+  for (let i = 0; i < 2; i++) {
+    const hx = -18.5 + i * 4.5;
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 0.9), matShield);
+    housing.position.set(hx, 1.6, rearZ + 0.22);
+    const cavity = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.95), matBlackPlastic);
+    cavity.position.set(hx, 1.6, rearZ + 0.18);
+    rearPanelGroup.add(housing, cavity);
+  }
+  // VGA
+  const vgaHousing = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 0.9), matShield);
+  vgaHousing.position.set(-9.5, 1.6, rearZ + 0.22);
+  const vgaCavity = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.9, 0.95), matBlackPlastic);
+  vgaCavity.position.set(-9.5, 1.6, rearZ + 0.18);
+  rearPanelGroup.add(vgaHousing, vgaCavity);
+
+  // USB ×2
+  for (let i = 0; i < 2; i++) {
+    const ux = -5.0 + i * 2.2;
+    const uh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.6), matShield);
+    uh.position.set(ux, 1.6, rearZ + 0.18);
+    const uhole = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.35, 0.7), matBlackPlastic);
+    uhole.position.set(ux, 1.6, rearZ + 0.28);
+    rearPanelGroup.add(uh, uhole);
+  }
+  // RJ45 ×2
+  for (let i = 0; i < 2; i++) {
+    const rx = 0.5 + i * 4.5;
+    const rh = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.95, 1.4), matShield);
+    rh.position.set(rx, 1.6, rearZ - 0.2);
+    const rc = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.65, 1.45), matBlackPlastic);
+    rc.position.set(rx, 1.6, rearZ - 0.12);
+    rearPanelGroup.add(rh, rc);
+    // 8 金针
+    for (let p = 0; p < 8; p++) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.5), matGold);
+      pin.position.set(rx - 0.35 + p * 0.1, 1.85, rearZ + 0.1);
+      rearPanelGroup.add(pin);
+    }
+  }
+  // eSATA
+  const esataH = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.0, 1.0), matShield);
+  esataH.position.set(9.0, 1.6, rearZ + 0.18);
+  const esataC = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 1.05), matBlackPlastic);
+  esataC.position.set(9.0, 1.6, rearZ + 0.22);
+  rearPanelGroup.add(esataH, esataC);
+
+  // Audio
+  const audioH = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 0.8), matShield);
+  audioH.position.set(13.5, 1.6, rearZ + 0.18);
+  rearPanelGroup.add(audioH);
+  for (let a = 0; a < 2; a++) {
+    const jack = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 12), matBlackPlastic);
+    jack.rotation.x = Math.PI / 2;
+    jack.position.set(12.6 + a * 1.8, 1.6, rearZ + 0.42);
+    rearPanelGroup.add(jack);
+  }
+
+  // Alarm terminal block
+  const alarmBlock = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.6, 1.0), matBlackPlastic);
+  alarmBlock.position.set(18.5, 1.6, rearZ + 0.18);
+  rearPanelGroup.add(alarmBlock);
+  for (let t = 0; t < 8; t++) {
+    const term = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.6, 0.35), matCopper);
+    term.position.set(16.5 + t * 0.5, 1.6, rearZ + 0.42);
+    rearPanelGroup.add(term);
+  }
+
+  // AC inlet + switch
+  const iecH = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, 0.9), matBlackPlastic);
+  iecH.position.set(-17.0, -2.6, rearZ + 0.22);
+  const iecCav = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.6, 0.6), new THREE.MeshBasicMaterial({ color: 0x050608 }));
+  iecCav.position.set(-17.0, -2.6, rearZ + 0.1);
+  rearPanelGroup.add(iecH, iecCav);
+  const swH = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 0.45), matBlackPlastic);
+  swH.position.set(-12.5, -2.6, rearZ + 0.06);
+  const swRocker = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.4), new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x991b1b, emissiveIntensity: 0.4, roughness: 0.3 }));
+  swRocker.position.set(-12.5, -2.6, rearZ - 0.1);
+  swRocker.rotation.x = 0.15;
+  rearPanelGroup.add(swH, swRocker);
+
+  // Fan ×2
+  const fanXs = [-4.0, 1.5];
+  const fanRotors = [];
+  fanXs.forEach((fx, fIdx) => {
+    const fanGroup = new THREE.Group();
+    fanGroup.name = `RearFan_${fIdx + 1}`;
+    fanGroup.position.set(fx, -2.4, rearZ + 0.2);
+    const fFrame = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.6, 1.1), matBlackPlastic);
+    fFrame.position.set(0, 0, 0.4);
+    fanGroup.add(fFrame);
+    const fTunnel = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0x070a0f }));
+    fTunnel.rotation.x = Math.PI / 2;
+    fTunnel.position.set(0, 0, 0.38);
+    fanGroup.add(fTunnel);
+    const rotor = new THREE.Group();
+    rotor.position.set(0, 0, 0.2);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.6, 16), matBlackPlastic);
+    hub.rotation.x = Math.PI / 2;
+    rotor.add(hub);
+    const bladeGeo = new THREE.BoxGeometry(0.9, 0.38, 0.07);
+    for (let b = 0; b < 7; b++) {
+      const ang = (b / 7) * Math.PI * 2;
+      const bp = new THREE.Group(); bp.rotation.z = ang;
+      const bm = new THREE.Mesh(bladeGeo, matBlackPlastic);
+      bm.position.set(1.05, 0, 0); bm.rotation.x = 0.5;
+      bp.add(bm); rotor.add(bp);
+    }
+    fanRotors.push(rotor);
+    fanGroup.add(rotor);
+    for (let r of [0.7, 1.15, 1.55]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.04, 8, 24), matShield);
+      ring.position.set(0, 0, -0.2);
+      fanGroup.add(ring);
+    }
+    rearPanelGroup.add(fanGroup);
+  });
+
+  // 接地柱
+  const gndWasher = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 18), matCopper);
+  gndWasher.rotation.x = Math.PI / 2;
+  gndWasher.position.set(18.5, -0.4, rearZ - 0.05);
+  const gndStud = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 14), matCopper);
+  gndStud.rotation.x = Math.PI / 2;
+  gndStud.position.set(18.5, -0.4, rearZ - 0.5);
+  rearPanelGroup.add(gndWasher, gndStud);
+
+  // -----------------------------------------------------------------------
+  // 6. INTERNALS
+  // -----------------------------------------------------------------------
+  // 主板 PCB
+  const pcbTex = new THREE.CanvasTexture((() => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0b3d2a'; ctx.fillRect(0, 0, 512, 256);
+    ctx.strokeStyle = '#107c55'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 40; i++) {
+      const y = 10 + i * 6;
+      ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(260, y); ctx.lineTo(290, y + (i % 2 ? 12 : -12)); ctx.lineTo(490, y + (i % 2 ? 12 : -12)); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = 'bold 14px monospace';
+    ctx.fillText('NVR MAINBOARD REV 3.1  ·  PoE 8-port PSE', 20, 240);
+    return c;
+  })());
+  applyColorSpace(pcbTex, THREE);
+  const mainPcbMat = new THREE.MeshStandardMaterial({ name: 'MainboardPcbMat', map: pcbTex, roughness: 0.4, metalness: 0.2 });
+  const mainPcb = new THREE.Mesh(new THREE.BoxGeometry(30, 0.2, 22), mainPcbMat);
+  mainPcb.position.set(-4, -2.6, -2);
+  mainPcb.name = 'Internal_Mainboard';
+  tagPart(mainPcb, 'NVR 主板 PCB', '承载 SoC、内存、PoE PSE、SATA 控制器的多层电路板。', 'BoxGeometry+PCBTexture', 'FR-4');
+  internalsGroup.add(mainPcb);
+
+  // 散热器
+  const hsBase = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 5.5), matHeatsink);
+  hsBase.position.set(-6, -2.2, -3);
+  internalsGroup.add(hsBase);
+  const finGeo = new THREE.BoxGeometry(0.12, 1.3, 5.5);
+  for (let f = 0; f < 12; f++) {
+    const fin = new THREE.Mesh(finGeo, matHeatsink);
+    fin.position.set(-9.2 + f * 0.58, -1.5, -3);
+    internalsGroup.add(fin);
+  }
+
+  // 硬盘笼：3 块竖隔板 + 每块硬盘的托架，避免硬盘悬空
+  for (const cx of [1.0, 11.4, 21.7]) {
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.18, 5.8, 15), matHdd);
+    plate.position.set(cx, 0.4, 12.2);
+    plate.name = 'Internal_HddCage_SidePlate';
+    hddGroup.add(plate);
+  }
+
+  // 4 块硬盘 (3.5" SATA 10.2×2.6×14.6,长轴沿 Z，正对前面板盘位)
+  for (let i = 0; i < 4; i++) {
+    const col = i % 2, row = Math.floor(i / 2);
+    const hx = 6.2 + col * 10.2;
+    const hy = 1.9 - row * 3.0;
+    const hz = 12.2;
+
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.16, 14.8), matHdd);
+    tray.position.set(hx, hy - 1.38, hz);
+    hddGroup.add(tray);
+
+    const hdd = new THREE.Mesh(new THREE.BoxGeometry(10.2, 2.6, 14.6), matHdd);
+    hdd.position.set(hx, hy, hz);
+    hdd.name = `Internal_HDD_${i + 1}`;
+    tagPart(hdd, `HDD ${i + 1} (3.5" SATA 4TB)`, '热插拔 SATA 硬盘，RAID 5 阵列成员。', 'BoxGeometry', 'HddCase');
+    hddGroup.add(hdd);
+
+    // 硬盘顶部标签贴纸
+    const lbl = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.2), matHddLabel);
+    lbl.rotation.x = -Math.PI / 2;
+    lbl.position.set(hx, hy + 1.31, hz);
+    hddGroup.add(lbl);
+  }
+
+  // 电源模块(放在机箱右后部，避免与前置硬盘笼冲突)
+  const psu = new THREE.Mesh(new THREE.BoxGeometry(9.5, 3.0, 12), matPsu);
+  psu.position.set(15.8, -1.4, -10);
+  psu.name = 'Internal_PSU';
+  tagPart(psu, '内置 200W 电源模块', '为 NVR 主板与 4 块硬盘提供稳定直流供电。', 'BoxGeometry', 'PSU');
+  internalsGroup.add(psu);
+  // 电容
+  const capGeo = new THREE.CylinderGeometry(0.7, 0.7, 2.0, 16);
+  for (let c = 0; c < 2; c++) {
+    const cap = new THREE.Mesh(capGeo, new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.35 }));
+    cap.position.set(12 + c * 2.2, 0.9, -6);
+    internalsGroup.add(cap);
+  }
+
+  // -----------------------------------------------------------------------
+  // shell tagging
+  // -----------------------------------------------------------------------
+  [topCoverGroup, chassisBaseGroup].forEach(g => {
+    g.traverse(o => { if (o.isMesh) o.userData.shell = true; });
+  });
+
+  // explode (optional, not wired to UI but harmless)
+  root.userData = {
+    groups: { chassisBaseGroup, topCoverGroup, frontPanelGroup, rearPanelGroup, rackEarsGroup, internalsGroup, hddGroup },
+    setExplodeFactor: (t) => {
+      topCoverGroup.position.set(0, t * 6, 0);
+      chassisBaseGroup.position.set(0, -t * 2, 0);
+      internalsGroup.position.set(0, t * 1, 0);
+      frontPanelGroup.position.set(0, 0, t * 4);
+      rearPanelGroup.position.set(0, 0, -t * 4);
+      hddGroup.position.set(0, 0, t * 2);
+    }
+  };
+
+  // front (+Z) -> faces camera after 180°
+  root.rotation.y = Math.PI;
+  return root;
+}
+// dome-camera.js — 海康威视 4MP 红外半球网络摄像机
+// 吸顶安装：白色塑胶外壳 + 烟灰色透明球罩，内部可见镜头模组、红外灯环与主板。
+// 单位：厘米(cm)。外形约 φ15.6 × 11.2 cm。镜头朝下并略向前倾。
+function buildDomeCamera(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'HikvisionDomeCamera';
+
+  const shellGroup = new THREE.Group(); shellGroup.name = 'DomeShellGroup';
+  const internalsGroup = new THREE.Group(); internalsGroup.name = 'DomeInternalsGroup';
+  root.add(shellGroup, internalsGroup);
+
+  // ---------- materials ----------
+  const matShell = mat(THREE, 'physical', 'DomeShellWhite', {
+    color: 0xf1f3f4, metalness: 0.05, roughness: 0.38, clearcoat: 0.25, clearcoatRoughness: 0.4,
+  });
+  const matTrim = mat(THREE, 'physical', 'DomeTrimGray', {
+    color: 0x9aa3ab, metalness: 0.55, roughness: 0.4,
+  });
+  const matDome = mat(THREE, 'physical', 'DomeSmokedGlass', {
+    color: 0x1b2733, metalness: 0.15, roughness: 0.06,
+    transparent: true, opacity: 0.42, clearcoat: 1.0,
+  });
+  const matBlack = mat(THREE, 'standard', 'DomeBlackPlastic', {
+    color: 0x0e1013, metalness: 0.1, roughness: 0.65,
+  });
+  const matLensGlass = mat(THREE, 'physical', 'DomeLensGlass', {
+    color: 0x07131f, metalness: 0.35, roughness: 0.04, clearcoat: 1.0,
+  });
+  const matPcb = mat(THREE, 'standard', 'DomePcbGreen', {
+    color: 0x0b3d2a, metalness: 0.15, roughness: 0.62,
+  });
+  const matGold = mat(THREE, 'physical', 'DomeGoldPin', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+  const matIr = mat(THREE, 'standard', 'DomeIrLed', {
+    color: 0x3a0a0a, emissive: 0x7f1d1d, emissiveIntensity: 0.45, roughness: 0.25,
+  });
+  const matRubber = mat(THREE, 'standard', 'DomeRubberGasket', {
+    color: 0x16181b, roughness: 0.9,
+  });
+
+  // ---------- side logo band texture ----------
+  const { c: bandC, ctx: bandCtx } = canvas(1024, 128);
+  bandCtx.fillStyle = '#f1f3f4'; bandCtx.fillRect(0, 0, 1024, 128);
+  bandCtx.fillStyle = '#c7ccd1'; bandCtx.fillRect(0, 0, 1024, 6); bandCtx.fillRect(0, 122, 1024, 6);
+  // 4 组循环，任意观察角度都能看到一组完整的品牌字样
+  for (let k = 0; k < 4; k++) {
+    const ox = k * 256;
+    bandCtx.fillStyle = '#dc2626'; bandCtx.fillRect(ox + 18, 42, 4, 44);
+    label(bandCtx, 'HIKVISION', ox + 30, 54, { px: 18, color: '#1f2937', mono: false });
+    label(bandCtx, '4MP IR DOME · IP67 · PoE', ox + 30, 86, { px: 11, color: '#6b7280' });
+  }
+  const bandTex = canvasTexture(THREE, bandC);
+  const matBand = mat(THREE, 'standard', 'DomeLogoBand', {
+    map: bandTex, roughness: 0.42, metalness: 0.05,
+  });
+
+  // ---------- ceiling mount plate ----------
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(7.8, 7.8, 0.55, 48), matShell);
+  plate.position.y = 0.28;
+  plate.castShadow = true; plate.receiveShadow = true;
+  plate.name = 'Dome_CeilingPlate';
+  tag(plate, '吸顶安装底盘', 'φ15.6cm 白色塑胶吸顶底盘，内含走线孔与三颗固定螺钉。', 'CylinderGeometry', 'ABS');
+  shellGroup.add(plate);
+
+  const plateRing = new THREE.Mesh(new THREE.TorusGeometry(7.55, 0.12, 8, 48), matTrim);
+  plateRing.rotation.x = Math.PI / 2;
+  plateRing.position.y = 0.02;
+  shellGroup.add(plateRing);
+
+  // 4 mounting screws
+  const screwGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.18, 12);
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2;
+    const sc = new THREE.Mesh(screwGeo, matTrim);
+    sc.position.set(Math.cos(a) * 6.6, 0.55, Math.sin(a) * 6.6);
+    shellGroup.add(sc);
+  }
+
+  // ---------- main housing ----------
+  const housing = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.2, 3.2, 48), matShell);
+  housing.position.y = -1.9;
+  housing.castShadow = true; housing.receiveShadow = true;
+  housing.name = 'Dome_MainHousing';
+  tag(housing, '半球摄像机主壳体', '白色阻燃塑胶外壳，侧面丝印品牌与型号，内部容纳镜头模组与主板。', 'CylinderGeometry', 'ABS + PC');
+  shellGroup.add(housing);
+
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(7.21, 7.21, 1.5, 48, 1, true), matBand);
+  band.position.y = -2.0;
+  band.name = 'Dome_LogoBand';
+  shellGroup.add(band);
+
+  // seam ring + bottom trim
+  const seam = new THREE.Mesh(new THREE.TorusGeometry(7.12, 0.09, 8, 48), matTrim);
+  seam.rotation.x = Math.PI / 2;
+  seam.position.y = -1.45;
+  shellGroup.add(seam);
+
+  const trim = new THREE.Mesh(new THREE.TorusGeometry(7.08, 0.18, 10, 48), matTrim);
+  trim.rotation.x = Math.PI / 2;
+  trim.position.y = -3.48;
+  shellGroup.add(trim);
+
+  // ---------- smoked dome ----------
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(6.95, 48, 24, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    matDome
+  );
+  dome.position.y = -3.4;
+  dome.name = 'Dome_SmokedCover';
+  tag(dome, '烟灰色透明球罩', 'φ13.9cm 烟灰色 PC 球罩，透光率约 42%，兼顾红外补光与隐蔽性。', 'SphereGeometry (half)', 'Smoked PC');
+  shellGroup.add(dome);
+
+  const domeGasket = new THREE.Mesh(new THREE.TorusGeometry(6.98, 0.1, 8, 48), matRubber);
+  domeGasket.rotation.x = Math.PI / 2;
+  domeGasket.position.y = -3.38;
+  shellGroup.add(domeGasket);
+
+  // ---------- internal lens module (tilted down-forward) ----------
+  const lensGroup = new THREE.Group();
+  lensGroup.name = 'Dome_LensModule';
+  lensGroup.position.set(0, -4.7, 0.75);
+  lensGroup.rotation.x = 2.18;
+  internalsGroup.add(lensGroup);
+
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 3.1, 32), matBlack);
+  barrel.position.y = 0.2;
+  tag(barrel, '4MP 定焦镜头筒', '金属镜头筒，内置 2.8mm 广角定焦镜头与红外截止滤光片。', 'CylinderGeometry', 'Aluminum + Glass');
+  lensGroup.add(barrel);
+
+  const lensRing = new THREE.Mesh(new THREE.TorusGeometry(1.58, 0.12, 10, 32), matTrim);
+  lensRing.rotation.x = Math.PI / 2;
+  lensRing.position.y = 1.78;
+  lensGroup.add(lensRing);
+
+  const lensGlass = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.12, 0.12, 32), matLensGlass);
+  lensGlass.position.y = 1.76;
+  lensGroup.add(lensGlass);
+
+  // IR LED ring: 12 emitters
+  const irGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.16, 10);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const led = new THREE.Mesh(irGeo, matIr);
+    led.position.set(Math.cos(a) * 2.35, 1.62, Math.sin(a) * 2.35);
+    lensGroup.add(led);
+  }
+  const irRing = new THREE.Mesh(new THREE.TorusGeometry(2.35, 0.09, 8, 36), matBlack);
+  irRing.rotation.x = Math.PI / 2;
+  irRing.position.y = 1.58;
+  lensGroup.add(irRing);
+
+  // ---------- internal boards & cabling ----------
+  const sensorPcb = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.22, 5.2), matPcb);
+  sensorPcb.position.set(0, -3.95, 0.4);
+  sensorPcb.rotation.x = 0.22;
+  sensorPcb.name = 'Dome_SensorPcb';
+  tag(sensorPcb, '图像传感器板', '1/2.7" CMOS 图像传感器与 ISP 处理电路。', 'BoxGeometry', 'FR-4');
+  internalsGroup.add(sensorPcb);
+
+  const mainPcb = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.28, 6.6), matPcb);
+  mainPcb.position.set(0, -1.2, 0);
+  mainPcb.name = 'Dome_MainPcb';
+  tag(mainPcb, '主控板', '海思 SoC、以太网变压器、PoE 受电模块与存储芯片。', 'BoxGeometry', 'FR-4');
+  internalsGroup.add(mainPcb);
+
+  // PCB components
+  const icGeo = new THREE.BoxGeometry(1.2, 0.3, 1.2);
+  for (let i = 0; i < 3; i++) {
+    const ic = new THREE.Mesh(icGeo, matBlack);
+    ic.position.set(-2.6 + i * 2.4, -1.0, 1.6);
+    internalsGroup.add(ic);
+  }
+  const pinGeo = new THREE.BoxGeometry(0.06, 0.16, 0.5);
+  for (let i = 0; i < 8; i++) {
+    const pin = new THREE.Mesh(pinGeo, matGold);
+    pin.position.set(-3.5 + i * 0.9, -0.95, -2.1);
+    internalsGroup.add(pin);
+  }
+
+  // ribbon cable from sensor to main board
+  const ribbonCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -3.95, 0.3),
+    new THREE.Vector3(0.3, -3.0, 0.1),
+    new THREE.Vector3(0.1, -1.6, -0.2),
+    new THREE.Vector3(0, -1.2, -0.6),
+  ]);
+  const ribbon = new THREE.Mesh(new THREE.TubeGeometry(ribbonCurve, 18, 0.28, 8, false), matBlack);
+  internalsGroup.add(ribbon);
+
+  // cable gland on top
+  const gland = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.1, 20), matTrim);
+  gland.position.set(-4.2, 0.9, -3.6);
+  shellGroup.add(gland);
+
+  // tamper screw at bottom rim
+  const tamper = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.3, 12), matTrim);
+  tamper.position.set(0, -3.62, 6.2);
+  shellGroup.add(tamper);
+
+  markShell(shellGroup);
+
+  root.userData = { groups: { shellGroup, internalsGroup } };
+  return root;
+}
+
+// ptz-camera.js — 7 寸红外网络球机（PTZ 高速球）
+// 壁装支架 + 白色金属球体 + 烟灰球罩；镜头朝 +Z，root 旋转 180° 后正对观察者。
+// 内部可见云台电机、解码板、镜头模组与红外灯环。单位：厘米(cm)。
+function buildPTZCamera(THREE) {
+  const { canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'HikvisionPTZCamera';
+
+  const shellGroup = new THREE.Group(); shellGroup.name = 'PtzShellGroup';
+  const internalsGroup = new THREE.Group(); internalsGroup.name = 'PtzInternalsGroup';
+  root.add(shellGroup, internalsGroup);
+
+  // ---------- materials ----------
+  const matShell = mat(THREE, 'physical', 'PtzShellWhite', {
+    color: 0xeef1f3, metalness: 0.18, roughness: 0.34, clearcoat: 0.3, clearcoatRoughness: 0.35,
+  });
+  const matMetal = mat(THREE, 'physical', 'PtzBracketMetal', {
+    color: 0xb9c0c6, metalness: 0.75, roughness: 0.3,
+  });
+  const matDome = mat(THREE, 'physical', 'PtzSmokedDome', {
+    color: 0x18242f, metalness: 0.15, roughness: 0.05,
+    transparent: true, opacity: 0.38, clearcoat: 1.0,
+  });
+  const matBlack = mat(THREE, 'standard', 'PtzBlackPlastic', {
+    color: 0x0d0f12, metalness: 0.12, roughness: 0.62,
+  });
+  const matLens = mat(THREE, 'physical', 'PtzLensGlass', {
+    color: 0x081420, metalness: 0.4, roughness: 0.03, clearcoat: 1.0,
+  });
+  const matPcb = mat(THREE, 'standard', 'PtzPcbGreen', {
+    color: 0x0b3d2a, metalness: 0.15, roughness: 0.6,
+  });
+  const matGold = mat(THREE, 'physical', 'PtzGoldPin', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+  const matIr = mat(THREE, 'standard', 'PtzIrLed', {
+    color: 0x3a0a0a, emissive: 0x7f1d1d, emissiveIntensity: 0.5, roughness: 0.25,
+  });
+  const matRubber = mat(THREE, 'standard', 'PtzRubber', {
+    color: 0x141619, roughness: 0.9,
+  });
+
+  // ---------- side logo band ----------
+  const { c: bandC, ctx: bandCtx } = canvas(1024, 128);
+  bandCtx.fillStyle = '#eef1f3'; bandCtx.fillRect(0, 0, 1024, 128);
+  bandCtx.fillStyle = '#d3d8dc'; bandCtx.fillRect(0, 0, 1024, 5);
+  // 4 组循环，任意观察角度都能看到一组完整的品牌字样
+  for (let k = 0; k < 4; k++) {
+    const ox = k * 256;
+    bandCtx.fillStyle = '#dc2626'; bandCtx.fillRect(ox + 18, 42, 4, 44);
+    label(bandCtx, 'HIKVISION', ox + 30, 54, { px: 18, color: '#1f2937', mono: false });
+    label(bandCtx, '4MP 30× PTZ · IR 150m · IP66', ox + 30, 86, { px: 11, color: '#6b7280' });
+  }
+  const bandTex = canvasTexture(THREE, bandC);
+  const matBand = mat(THREE, 'standard', 'PtzLogoBand', { map: bandTex, roughness: 0.4, metalness: 0.1 });
+
+  // ---------- wall bracket ----------
+  const wallPlate = new THREE.Mesh(new THREE.BoxGeometry(16, 15, 1.2), matMetal);
+  wallPlate.position.set(0, 7, -17);
+  wallPlate.castShadow = true; wallPlate.receiveShadow = true;
+  wallPlate.name = 'Ptz_WallPlate';
+  tag(wallPlate, '壁装支架底盘', '16×15cm 压铸铝壁装底盘，四角 M8 膨胀螺栓固定。', 'BoxGeometry', 'Die-cast Aluminum');
+  shellGroup.add(wallPlate);
+
+  const boltGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.55, 12);
+  boltGeo.rotateX(Math.PI / 2);
+  for (const bx of [-5.8, 5.8]) {
+    for (const by of [2.4, 11.6]) {
+      const bolt = new THREE.Mesh(boltGeo, matMetal);
+      bolt.position.set(bx, by, -16.2);
+      shellGroup.add(bolt);
+    }
+  }
+
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(6.2, 6.2, 10.5), matShell);
+  arm.position.set(0, 7, -11.2);
+  arm.castShadow = true;
+  arm.name = 'Ptz_WallArm';
+  tag(arm, '壁装横臂', '6.2cm 方管横臂，内部走网络与电源线。', 'BoxGeometry', 'Aluminum');
+  shellGroup.add(arm);
+
+  const joint = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.1, 2.6, 24), matShell);
+  joint.position.set(0, 6.0, -6.2);
+  shellGroup.add(joint);
+
+  // ---------- main ball body ----------
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.2, 7.0, 48), matShell);
+  body.position.y = 0;
+  body.castShadow = true; body.receiveShadow = true;
+  body.name = 'Ptz_BallBody';
+  tag(body, '7 寸球机主壳体', '白色喷塑铝合金球体，内置云台电机与解码板。', 'CylinderGeometry', 'Aluminum');
+  shellGroup.add(body);
+
+  const topCap = new THREE.Mesh(
+    new THREE.SphereGeometry(7.2, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+    matShell
+  );
+  topCap.scale.y = 0.34;
+  topCap.position.y = 3.5;
+  shellGroup.add(topCap);
+
+  const sunShield = new THREE.Mesh(
+    new THREE.SphereGeometry(7.9, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2.4),
+    matShell
+  );
+  sunShield.scale.y = 0.30;
+  sunShield.position.y = 3.9;
+  sunShield.castShadow = true;
+  sunShield.name = 'Ptz_SunShield';
+  tag(sunShield, '一体化遮阳罩', '外扩式遮阳罩，降低阳光直射导致的机内温升。', 'SphereGeometry cap', 'Aluminum');
+  shellGroup.add(sunShield);
+
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(7.21, 7.21, 1.5, 48, 1, true), matBand);
+  band.position.y = -2.0;
+  shellGroup.add(band);
+
+  // 上下壳体分模线 + 侧面散热槽 + 固定螺钉
+  const midSeam = new THREE.Mesh(new THREE.TorusGeometry(7.15, 0.06, 8, 48), matMetal);
+  midSeam.rotation.x = Math.PI / 2;
+  midSeam.position.y = 0.6;
+  shellGroup.add(midSeam);
+
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 6; i++) {
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.3, 0.36), matBlack);
+      vent.position.set(side * 7.21, 0.6, -2.0 + i * 0.62);
+      shellGroup.add(vent);
+    }
+  }
+
+  const boltHeadGeo = new THREE.SphereGeometry(0.13, 10, 8);
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2;
+    const bolt = new THREE.Mesh(boltHeadGeo, matMetal);
+    bolt.position.set(Math.cos(a) * 7.2, 2.7, Math.sin(a) * 7.2);
+    shellGroup.add(bolt);
+  }
+
+  const trim = new THREE.Mesh(new THREE.TorusGeometry(7.12, 0.18, 10, 48), matMetal);
+  trim.rotation.x = Math.PI / 2;
+  trim.position.y = -3.5;
+  shellGroup.add(trim);
+
+  const topSeam = new THREE.Mesh(new THREE.TorusGeometry(7.14, 0.08, 8, 48), matMetal);
+  topSeam.rotation.x = Math.PI / 2;
+  topSeam.position.y = 3.45;
+  shellGroup.add(topSeam);
+
+  // 前侧状态灯 + Reset 针孔
+  const statusLed = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 0.1, 10),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.1, roughness: 0.2 })
+  );
+  statusLed.rotation.x = Math.PI / 2;
+  statusLed.position.set(-0.8, -1.0, 7.22);
+  shellGroup.add(statusLed);
+  const resetHole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 8), matBlack);
+  resetHole.rotation.x = Math.PI / 2;
+  resetHole.position.set(1.0, -1.0, 7.22);
+  shellGroup.add(resetHole);
+
+  // ---------- smoked dome ----------
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(7.0, 48, 24, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    matDome
+  );
+  dome.position.y = -3.4;
+  dome.name = 'Ptz_SmokedDome';
+  tag(dome, '烟灰色透明球罩', '7 寸烟灰 PC 球罩，内置红外补光与 30 倍变焦镜头。', 'SphereGeometry (half)', 'Smoked PC');
+  shellGroup.add(dome);
+
+  const domeGasket = new THREE.Mesh(new THREE.TorusGeometry(7.02, 0.11, 8, 48), matRubber);
+  domeGasket.rotation.x = Math.PI / 2;
+  domeGasket.position.y = -3.38;
+  shellGroup.add(domeGasket);
+
+  // ---------- internal pan/tilt & lens ----------
+  const panMotor = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 2.2, 24), matMetal);
+  panMotor.position.set(0, 4.2, 0);
+  panMotor.name = 'Ptz_PanMotor';
+  tag(panMotor, '水平云台电机', '步进电机 + 行星减速箱，支持 360° 连续旋转。', 'CylinderGeometry', 'Steel + Copper');
+  internalsGroup.add(panMotor);
+
+  const panGear = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.5, 32), matGold);
+  panGear.position.set(0, 3.1, 0);
+  internalsGroup.add(panGear);
+
+  const tiltMotor = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 3.2, 20), matMetal);
+  tiltMotor.rotation.z = Math.PI / 2;
+  tiltMotor.position.set(-5.2, 0, -2.6);
+  tiltMotor.name = 'Ptz_TiltMotor';
+  tag(tiltMotor, '垂直云台电机', '-15°~90° 俯仰电机与蜗轮蜗杆自锁机构。', 'CylinderGeometry', 'Steel');
+  internalsGroup.add(tiltMotor);
+
+  const tiltGear = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 0.5, 24), matGold);
+  tiltGear.rotation.z = Math.PI / 2;
+  tiltGear.position.set(-3.5, 0, -2.6);
+  internalsGroup.add(tiltGear);
+
+  // main decoder board (vertical)
+  const mainPcb = new THREE.Mesh(new THREE.BoxGeometry(8.6, 5.2, 0.28), matPcb);
+  mainPcb.position.set(0, 0.6, -4.2);
+  mainPcb.name = 'Ptz_MainPcb';
+  tag(mainPcb, '云台解码板', '集成云台控制、网络编码、PoE 受电与镜头驱动电路。', 'BoxGeometry', 'FR-4');
+  internalsGroup.add(mainPcb);
+
+  const icGeo = new THREE.BoxGeometry(1.1, 1.1, 0.3);
+  for (let i = 0; i < 4; i++) {
+    const ic = new THREE.Mesh(icGeo, matBlack);
+    ic.position.set(-2.7 + i * 1.8, 1.1, -4.0);
+    internalsGroup.add(ic);
+  }
+
+  // lens assembly
+  const lensGroup = new THREE.Group();
+  lensGroup.name = 'Ptz_LensModule';
+  // 镜头位于球罩中部、朝前，不能藏在不透明的上部球体里
+  lensGroup.position.set(0, -3.6, 0.6);
+  internalsGroup.add(lensGroup);
+
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(2.45, 2.45, 4.8, 32), matBlack);
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.z = 2.4;
+  tag(barrel, '30 倍光学变焦镜头', '4MP 1/1.8" 传感器 + 30× 光学变焦镜头组。', 'CylinderGeometry', 'Aluminum + Glass');
+  lensGroup.add(barrel);
+
+  const lensRing = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.14, 10, 36), matMetal);
+  lensRing.position.z = 4.82;
+  lensGroup.add(lensRing);
+
+  const lensGlass = new THREE.Mesh(new THREE.CylinderGeometry(1.95, 1.95, 0.12, 36), matLens);
+  lensGlass.rotation.x = Math.PI / 2;
+  lensGlass.position.z = 4.86;
+  lensGroup.add(lensGlass);
+
+  // IR ring around lens
+  const irGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.2, 10);
+  irGeo.rotateX(Math.PI / 2);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const led = new THREE.Mesh(irGeo, matIr);
+    led.position.set(Math.cos(a) * 3.35, Math.sin(a) * 3.35, 4.55);
+    lensGroup.add(led);
+  }
+  const irRing = new THREE.Mesh(new THREE.TorusGeometry(3.35, 0.1, 8, 40), matBlack);
+  irRing.position.z = 4.5;
+  lensGroup.add(irRing);
+
+  // wiper arm
+  const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 4.2), matBlack);
+  wiper.position.set(-3.1, 3.1, 4.0);
+  wiper.rotation.x = -0.25;
+  lensGroup.add(wiper);
+
+  // bracket cable
+  const cableCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 7.2, -16.2),
+    new THREE.Vector3(0, 6.2, -13.5),
+    new THREE.Vector3(0, 5.2, -9.5),
+    new THREE.Vector3(0, 4.6, -6.4),
+  ]);
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(cableCurve, 20, 0.34, 10, false), matRubber);
+  shellGroup.add(cable);
+
+  markShell(shellGroup);
+
+  root.rotation.y = Math.PI;   // 镜头(+Z)转向观察者
+  root.userData = { groups: { shellGroup, internalsGroup } };
+  return root;
+}
+
+// poe-switch-8.js — 8 口千兆 PoE+ + 2 口千兆 SFP 桌面型安防交换机
+// 金属外壳、无风扇/低噪设计，前面板 8×RJ45 + 2×SFP，后置 AC 电源与接地。
+// 单位：厘米(cm)。外形 28 × 4.4 × 18。
+function buildPoeSwitch8(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'PoeSwitch8';
+
+  const baseGroup = new THREE.Group(); baseGroup.name = 'Sw8BaseGroup';
+  const coverGroup = new THREE.Group(); coverGroup.name = 'Sw8CoverGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'Sw8FrontGroup';
+  const rearGroup = new THREE.Group(); rearGroup.name = 'Sw8RearGroup';
+  const internalGroup = new THREE.Group(); internalGroup.name = 'Sw8InternalGroup';
+  root.add(baseGroup, coverGroup, frontGroup, rearGroup, internalGroup);
+
+  const W = 28, H = 4.4, D = 18;
+  const hw = W / 2, hh = H / 2, hd = D / 2;
+  const wall = 0.14;
+
+  // ---------- materials ----------
+  const matCase = mat(THREE, 'physical', 'Sw8CaseMetal', {
+    color: 0x22262c, metalness: 0.75, roughness: 0.38, clearcoat: 0.15,
+  });
+  const matCover = mat(THREE, 'physical', 'Sw8CoverMetal', {
+    color: 0x272c33, metalness: 0.75, roughness: 0.36, clearcoat: 0.18,
+  });
+  const matShield = mat(THREE, 'physical', 'Sw8ShieldNickel', {
+    color: 0xc8d0d6, metalness: 0.9, roughness: 0.22,
+  });
+  const matBlack = mat(THREE, 'standard', 'Sw8BlackLcp', {
+    color: 0x0e1014, metalness: 0.12, roughness: 0.62,
+  });
+  const matGold = mat(THREE, 'physical', 'Sw8GoldPin', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.14,
+  });
+  const matRubber = mat(THREE, 'standard', 'Sw8RubberFoot', {
+    color: 0x0a0b0d, roughness: 0.9,
+  });
+  const matHeatsink = mat(THREE, 'physical', 'Sw8Heatsink', {
+    color: 0x2a2f36, metalness: 0.85, roughness: 0.3,
+  });
+  const matPsu = mat(THREE, 'physical', 'Sw8PsuAlum', {
+    color: 0x94a3b8, metalness: 0.85, roughness: 0.3,
+  });
+  const matPcb = mat(THREE, 'standard', 'Sw8PcbGreen', {
+    color: 0x0b3d2a, metalness: 0.15, roughness: 0.6,
+  });
+  const matCopper = mat(THREE, 'physical', 'Sw8Copper', {
+    color: 0xd97706, metalness: 0.9, roughness: 0.25,
+  });
+
+  // ---------- front silkscreen ----------
+  const PW = W - 0.3, PH = H - 0.3;
+  const CW = 2048, CH = Math.round(CW * PH / PW);
+  const { c: fc, ctx: f } = canvas(CW, CH);
+  const PX = x => (x / PW + 0.5) * CW;
+  const PY = y => (0.5 - y / PH) * CH;
+
+  const g = f.createLinearGradient(0, 0, CW, CH);
+  g.addColorStop(0, '#1b1f25'); g.addColorStop(0.5, '#23282f'); g.addColorStop(1, '#181c22');
+  f.fillStyle = g; f.fillRect(0, 0, CW, CH);
+  for (let y = 0; y < CH; y += 3) {
+    f.strokeStyle = 'rgba(255,255,255,0.02)'; f.lineWidth = 1;
+    f.beginPath(); f.moveTo(0, y); f.lineTo(CW, y); f.stroke();
+  }
+  f.fillStyle = '#dc2626'; f.fillRect(PX(-13.7), PY(2.0), PX(13.7) - PX(-13.7), 4);
+
+  label(f, 'HIKVISION', PX(-13.5), PY(1.62), { px: 17, color: '#f8fafc', mono: false });
+  label(f, 'DS-3E0109P-E', PX(-13.5), PY(1.30), { px: 10, color: '#94a3b8' });
+  label(f, '8×GE PoE+  ·  2×GE SFP  ·  120W', PX(13.4), PY(1.62), { px: 9, color: '#94a3b8', align: 'right' });
+  label(f, 'PoE+ 120W BUDGET', PX(13.4), PY(1.30), { px: 9, color: '#f59e0b', align: 'right' });
+
+  // port numbers aligned with 3D ports
+  for (let i = 0; i < 8; i++) {
+    const x = -11 + i * 1.75;
+    label(f, String(i + 1), PX(x), PY(0.58), { px: 18, color: '#cbd5e1', align: 'center' });
+  }
+  label(f, 'SFP1', PX(6.5), PY(0.58), { px: 11, color: '#38bdf8', align: 'center' });
+  label(f, 'SFP2', PX(9.2), PY(0.58), { px: 11, color: '#38bdf8', align: 'center' });
+  label(f, 'RESET', PX(12.4), PY(1.62), { px: 7, color: '#94a3b8', align: 'center' });
+  const frontTex = canvasTexture(THREE, fc);
+  const matFront = mat(THREE, 'standard', 'Sw8FrontSilk', { map: frontTex, roughness: 0.42, metalness: 0.35 });
+
+  // ---------- U chassis ----------
+  const uShape = new THREE.Shape();
+  uShape.moveTo(-hw, hh - 0.1);
+  uShape.lineTo(-hw, -hh + 0.1);
+  uShape.quadraticCurveTo(-hw, -hh, -hw + 0.1, -hh);
+  uShape.lineTo(hw - 0.1, -hh);
+  uShape.quadraticCurveTo(hw, -hh, hw, -hh + 0.1);
+  uShape.lineTo(hw, hh - 0.1);
+  uShape.lineTo(hw - wall, hh - 0.1);
+  uShape.lineTo(hw - wall, -hh + wall);
+  uShape.lineTo(-hw + wall, -hh + wall);
+  uShape.lineTo(-hw + wall, hh - 0.1);
+  uShape.closePath();
+  const uGeo = new THREE.ExtrudeGeometry(uShape, {
+    depth: D - 0.3, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  uGeo.translate(0, 0, -(D - 0.3) / 2);
+  const uBody = new THREE.Mesh(uGeo, matCase);
+  uBody.name = 'Sw8_UChassis';
+  uBody.castShadow = true; uBody.receiveShadow = true;
+  tag(uBody, 'U 型金属下机壳', '0.8mm 冷轧钢板折弯，深灰喷塑，兼顾散热与 EMI 屏蔽。', 'Shape + ExtrudeGeometry', 'SECC');
+  baseGroup.add(uBody);
+
+  // rubber feet
+  const footGeo = new THREE.CylinderGeometry(0.75, 0.65, 0.24, 18);
+  for (const fx of [-hw + 3, hw - 3]) {
+    for (const fz of [-hd + 3, hd - 3]) {
+      const foot = new THREE.Mesh(footGeo, matRubber);
+      foot.position.set(fx, -hh - 0.12, fz);
+      baseGroup.add(foot);
+    }
+  }
+
+  // ---------- top cover ----------
+  const coverShape = roundedRectShape(THREE, W - 0.06, D - 0.24, 0.2);
+  const coverGeo = new THREE.ExtrudeGeometry(coverShape, {
+    depth: 0.12, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2,
+  });
+  coverGeo.rotateX(Math.PI / 2);
+  const cover = new THREE.Mesh(coverGeo, matCover);
+  cover.position.y = hh;
+  cover.name = 'Sw8_TopCover';
+  cover.castShadow = true;
+  tag(cover, '可拆卸顶盖', '顶盖冲压散热格栅，支持「查看内部」透视。', 'Shape + ExtrudeGeometry', 'SECC');
+  coverGroup.add(cover);
+
+  // top vents
+  const ventGeo = new THREE.BoxGeometry(10, 0.03, 0.22);
+  for (let i = 0; i < 7; i++) {
+    const vent = new THREE.Mesh(ventGeo, matBlack);
+    vent.position.set(-4, hh + 0.07, -6 + i * 1.6);
+    coverGroup.add(vent);
+  }
+
+  // ---------- front bezel + ports ----------
+  const frontZ = hd;
+  const bezelShape = roundedRectShape(THREE, W + 0.02, H + 0.02, 0.15);
+  const bezelGeo = new THREE.ExtrudeGeometry(bezelShape, {
+    depth: 0.3, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  bezelGeo.translate(0, 0, -0.15);
+  const bezel = new THREE.Mesh(bezelGeo, matCase);
+  bezel.position.z = frontZ;
+  frontGroup.add(bezel);
+
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), matFront);
+  // 前面板倒角会再向外凸 0.03，丝印面必须再往前，否则会被壳体盖住
+  face.position.set(0, 0, frontZ + 0.24);
+  face.name = 'Sw8_FrontPanel';
+  tag(face, '前面板丝印', '品牌、型号、端口编号与 PoE 功率标识。', 'PlaneGeometry + CanvasTexture', 'Silkscreen');
+  frontGroup.add(face);
+
+  // 8 RJ45 ports
+  const portX = i => -11 + i * 1.75;
+  for (let i = 0; i < 8; i++) {
+    const x = portX(i);
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(1.42, 1.0, 1.3), matShield);
+    cage.position.set(x, -0.55, frontZ - 0.1);
+    const cavity = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.7, 1.36), matBlack);
+    cavity.position.set(x, -0.55, frontZ + 0.02);
+    const latch = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 1.38), matBlack);
+    latch.position.set(x, -0.92, frontZ + 0.02);
+    frontGroup.add(cage, cavity, latch);
+
+    for (let p = 0; p < 8; p++) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.5), matGold);
+      pin.position.set(x - 0.36 + p * 0.103, -0.4, frontZ + 0.18);
+      frontGroup.add(pin);
+    }
+
+    // link + PoE LEDs
+    const blink = new THREE.MeshStandardMaterial({
+      color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 0.9, roughness: 0.2,
+    });
+    const poe = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 0.8, roughness: 0.2,
+    });
+    const ledGeo = new THREE.BoxGeometry(0.2, 0.1, 0.08);
+    const l1 = new THREE.Mesh(ledGeo, blink); l1.position.set(x - 0.36, 0.82, frontZ + 0.19);
+    const l2 = new THREE.Mesh(ledGeo, poe); l2.position.set(x + 0.36, 0.82, frontZ + 0.19);
+    frontGroup.add(l1, l2);
+  }
+
+  // 2 SFP cages
+  for (const sx of [6.5, 9.2]) {
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.95, 1.7), matShield);
+    cage.position.set(sx, -0.55, frontZ - 0.15);
+    const cavity = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.68, 1.75), matBlack);
+    cavity.position.set(sx, -0.55, frontZ - 0.08);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.62, 0.3), matRubber);
+    cap.position.set(sx, -0.55, frontZ + 0.3);
+    frontGroup.add(cage, cavity, cap);
+  }
+
+  // reset pinhole
+  const rst = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.3, 10), matBlack);
+  rst.rotation.x = Math.PI / 2;
+  rst.position.set(12.4, -0.55, frontZ + 0.2);
+  frontGroup.add(rst);
+
+  // power LED
+  const pwrLed = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 0.1, 10),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.1, roughness: 0.2 })
+  );
+  pwrLed.rotation.x = Math.PI / 2;
+  pwrLed.position.set(-13.2, -0.55, frontZ + 0.2);
+  frontGroup.add(pwrLed);
+
+  // ---------- rear panel ----------
+  const rearZ = -hd;
+  const rear = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.2, H - 0.2), matCase);
+  rear.rotation.y = Math.PI;
+  rear.position.z = rearZ + 0.02;
+  rearGroup.add(rear);
+
+  // AC inlet
+  const iec = new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.0, 0.8), matBlack);
+  iec.position.set(-10, -0.5, rearZ + 0.1);
+  const iecCav = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.45, 0.55), new THREE.MeshBasicMaterial({ color: 0x050608 }));
+  iecCav.position.set(-10, -0.5, rearZ + 0.02);
+  rearGroup.add(iec, iecCav);
+  const bladeGeo = new THREE.BoxGeometry(0.12, 0.42, 0.55);
+  for (const [bx, by] of [[-0.6, -0.2], [0.6, -0.2], [0, 0.3]]) {
+    const blade = new THREE.Mesh(bladeGeo, matCopper);
+    blade.position.set(-10 + bx, -0.5 + by, rearZ - 0.2);
+    rearGroup.add(blade);
+  }
+
+  // ground stud
+  const gnd = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 1.0, 16), matCopper);
+  gnd.rotation.x = Math.PI / 2;
+  gnd.position.set(-6, -1.2, rearZ - 0.45);
+  rearGroup.add(gnd);
+
+  // 40mm fan
+  const fanGroup = new THREE.Group();
+  fanGroup.position.set(7.5, -0.4, rearZ + 0.12);
+  const fanFrame = new THREE.Mesh(new THREE.BoxGeometry(4.0, 4.0, 0.9), matBlack);
+  fanFrame.position.z = 0.25;
+  fanGroup.add(fanFrame);
+  const fanTunnel = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, 1.0, 24), new THREE.MeshBasicMaterial({ color: 0x06080c }));
+  fanTunnel.rotation.x = Math.PI / 2;
+  fanGroup.add(fanTunnel);
+  const rotor = new THREE.Group();
+  rotor.position.z = 0.15;
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.55, 16), matBlack);
+  hub.rotation.x = Math.PI / 2;
+  rotor.add(hub);
+  const fanBladeGeo = new THREE.BoxGeometry(1.0, 0.38, 0.06);
+  for (let b = 0; b < 7; b++) {
+    const bp = new THREE.Group();
+    bp.rotation.z = (b / 7) * Math.PI * 2;
+    const bm = new THREE.Mesh(fanBladeGeo, matBlack);
+    bm.position.x = 1.05; bm.rotation.x = 0.5;
+    bp.add(bm); rotor.add(bp);
+  }
+  fanGroup.add(rotor);
+  for (const r of [0.7, 1.2, 1.62]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.04, 8, 24), matShield);
+    ring.position.z = -0.18;
+    fanGroup.add(ring);
+  }
+  rearGroup.add(fanGroup);
+
+  // rear vent slots
+  const rvGeo = new THREE.BoxGeometry(0.18, 1.8, 0.04);
+  for (let i = 0; i < 6; i++) {
+    const rv = new THREE.Mesh(rvGeo, matBlack);
+    rv.position.set(-2.5 + i * 1.1, -0.4, rearZ + 0.04);
+    rearGroup.add(rv);
+  }
+
+  // ---------- internals ----------
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(24, 0.2, 14), matPcb);
+  pcb.position.set(-1, -1.4, 0);
+  pcb.name = 'Sw8_MainPcb';
+  tag(pcb, '交换主板', '集成 8 口千兆交换 ASIC、PoE PSE 控制器与网络变压器。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(pcb);
+
+  // 8 transformers behind ports
+  const trGeo = new THREE.BoxGeometry(1.1, 0.7, 1.0);
+  for (let i = 0; i < 8; i++) {
+    const tr = new THREE.Mesh(trGeo, matBlack);
+    tr.position.set(portX(i), -1.0, 4.2);
+    internalGroup.add(tr);
+  }
+
+  // PoE controller heatsink
+  const hs = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 4), matHeatsink);
+  hs.position.set(-5, -1.1, -2.5);
+  internalGroup.add(hs);
+  const finGeo = new THREE.BoxGeometry(0.12, 1.2, 4);
+  for (let i = 0; i < 12; i++) {
+    const fin = new THREE.Mesh(finGeo, matHeatsink);
+    fin.position.set(-8.2 + i * 0.58, -0.45, -2.5);
+    internalGroup.add(fin);
+  }
+
+  // PSU
+  const psu = new THREE.Mesh(new THREE.BoxGeometry(7.5, 2.4, 9), matPsu);
+  psu.position.set(9, -1.0, 0);
+  psu.name = 'Sw8_Psu';
+  tag(psu, '120W 内置电源', '54V PoE 输出与 5V/3.3V 系统供电。', 'BoxGeometry', 'Galvanized Steel');
+  internalGroup.add(psu);
+  const capGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.6, 14);
+  for (let i = 0; i < 2; i++) {
+    const cap = new THREE.Mesh(capGeo, matCopper);
+    cap.position.set(7 + i * 1.6, 0.4, -2.6);
+    internalGroup.add(cap);
+  }
+
+  markShell(coverGroup);
+  markShell(baseGroup);
+  internalGroup.visible = false;   // 默认只看外观，点「查看内部」再显示
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { baseGroup, coverGroup, frontGroup, rearGroup, internalGroup },
+    onShellToggle: (on) => { internalGroup.visible = !on; },
+  };
+  return root;
+}
+
+// fiber-odf.js — 24 口 LC 双工光纤配线架（ODF）
+// 19" 1U 机架式，2×12 LC 双工适配器、48 芯熔接盘、黄色单模尾纤与理线环。
+// 单位：厘米(cm)。外形 44 × 4.4 × 30。front +Z，root 旋转 180°。
+function buildFiberODF(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'FiberODF24';
+
+  const baseGroup = new THREE.Group(); baseGroup.name = 'OdfBaseGroup';
+  const coverGroup = new THREE.Group(); coverGroup.name = 'OdfCoverGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'OdfFrontGroup';
+  const trayGroup = new THREE.Group(); trayGroup.name = 'OdfSpliceTrayGroup';
+  const patchGroup = new THREE.Group(); patchGroup.name = 'OdfPatchCordsGroup';
+  root.add(baseGroup, coverGroup, frontGroup, trayGroup, patchGroup);
+
+  const W = 44, H = 4.4, D = 30;
+  const hw = W / 2, hh = H / 2, hd = D / 2;
+  const wall = 0.14;
+
+  // ---------- materials ----------
+  const matCase = mat(THREE, 'physical', 'OdfCaseMetal', {
+    color: 0x23272d, metalness: 0.75, roughness: 0.38,
+  });
+  const matCover = mat(THREE, 'physical', 'OdfCoverMetal', {
+    color: 0x282d34, metalness: 0.75, roughness: 0.36,
+  });
+  const matShield = mat(THREE, 'physical', 'OdfNickel', {
+    color: 0xc8d0d6, metalness: 0.9, roughness: 0.22,
+  });
+  const matBlack = mat(THREE, 'standard', 'OdfBlackPlastic', {
+    color: 0x0e1014, metalness: 0.1, roughness: 0.65,
+  });
+  const matBlue = mat(THREE, 'standard', 'OdfLcUpcBlue', {
+    color: 0x1d4ed8, metalness: 0.1, roughness: 0.45,
+  });
+  const matGreen = mat(THREE, 'standard', 'OdfLcApcGreen', {
+    color: 0x15803d, metalness: 0.1, roughness: 0.45,
+  });
+  const matFiber = mat(THREE, 'standard', 'OdfFiberYellow', {
+    color: 0xfacc15, metalness: 0.05, roughness: 0.5,
+  });
+  const matRubber = mat(THREE, 'standard', 'OdfRubber', {
+    color: 0x141619, roughness: 0.9,
+  });
+  const matGold = mat(THREE, 'physical', 'OdfGold', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+
+  // ---------- front silkscreen ----------
+  const PW = W - 0.4, PH = H - 0.3;
+  const CW = 2048, CH = Math.round(CW * PH / PW);
+  const { c: fc, ctx: f } = canvas(CW, CH);
+  const PX = x => (x / PW + 0.5) * CW;
+  const PY = y => (0.5 - y / PH) * CH;
+
+  const g = f.createLinearGradient(0, 0, CW, CH);
+  g.addColorStop(0, '#1c2026'); g.addColorStop(0.5, '#252a31'); g.addColorStop(1, '#191d23');
+  f.fillStyle = g; f.fillRect(0, 0, CW, CH);
+  for (let y = 0; y < CH; y += 3) {
+    f.strokeStyle = 'rgba(255,255,255,0.022)'; f.lineWidth = 1;
+    f.beginPath(); f.moveTo(0, y); f.lineTo(CW, y); f.stroke();
+  }
+  f.fillStyle = '#dc2626'; f.fillRect(PX(-21.6), PY(2.02), PX(21.6) - PX(-21.6), 4);
+
+  label(f, 'HIKVISION', PX(-21.2), PY(1.55), { px: 15, color: '#f8fafc', mono: false });
+  label(f, '24 PORT LC DUPLEX ODF', PX(-21.2), PY(1.15), { px: 9, color: '#94a3b8' });
+  label(f, '48 FIBERS  ·  19" 1U  ·  SM/MM', PX(-21.2), PY(0.78), { px: 8, color: '#64748b' });
+  label(f, '48F', PX(21.2), PY(1.55), { px: 13, color: '#38bdf8', align: 'right' });
+  label(f, 'LC/UPC · LC/APC', PX(21.2), PY(1.15), { px: 8, color: '#94a3b8', align: 'right' });
+
+  // adapter numbers: 2 rows × 12, aligned with 3D adapters
+  const ax = i => -15.4 + i * 2.8;
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 12; i++) {
+      const n = row * 12 + i + 1;
+      label(f, String(n).padStart(2, '0'), PX(ax(i)), PY(row === 0 ? 1.52 : 0.0), {
+        px: 13, color: row === 0 ? '#cbd5e1' : '#94a3b8', align: 'center',
+      });
+    }
+  }
+  label(f, 'SPLICE TRAY  ·  24× HEAT-SHRINK PROTECTOR', PX(0), PY(-1.82), { px: 8, color: '#64748b', align: 'center' });
+
+  const frontTex = canvasTexture(THREE, fc);
+  const matFront = mat(THREE, 'standard', 'OdfFrontSilk', { map: frontTex, roughness: 0.42, metalness: 0.35 });
+
+  // ---------- chassis ----------
+  const uShape = new THREE.Shape();
+  uShape.moveTo(-hw, hh - 0.1);
+  uShape.lineTo(-hw, -hh + 0.1);
+  uShape.quadraticCurveTo(-hw, -hh, -hw + 0.1, -hh);
+  uShape.lineTo(hw - 0.1, -hh);
+  uShape.quadraticCurveTo(hw, -hh, hw, -hh + 0.1);
+  uShape.lineTo(hw, hh - 0.1);
+  uShape.lineTo(hw - wall, hh - 0.1);
+  uShape.lineTo(hw - wall, -hh + wall);
+  uShape.lineTo(-hw + wall, -hh + wall);
+  uShape.lineTo(-hw + wall, hh - 0.1);
+  uShape.closePath();
+  const uGeo = new THREE.ExtrudeGeometry(uShape, {
+    depth: D - 0.3, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  uGeo.translate(0, 0, -(D - 0.3) / 2);
+  const uBody = new THREE.Mesh(uGeo, matCase);
+  uBody.name = 'Odf_UChassis';
+  uBody.castShadow = true; uBody.receiveShadow = true;
+  tag(uBody, '1U U 型下机壳', '冷轧钢板折弯，前面板承托 24 个 LC 双工适配器。', 'Shape + ExtrudeGeometry', 'SECC');
+  baseGroup.add(uBody);
+
+  const coverShape = roundedRectShape(THREE, W - 0.06, D - 0.24, 0.2);
+  const coverGeo = new THREE.ExtrudeGeometry(coverShape, {
+    depth: 0.12, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2,
+  });
+  coverGeo.rotateX(Math.PI / 2);
+  const cover = new THREE.Mesh(coverGeo, matCover);
+  cover.position.y = hh;
+  cover.name = 'Odf_TopCover';
+  cover.castShadow = true;
+  tag(cover, '可拆卸顶盖', '顶盖可拆，露出熔接盘与盘纤区。', 'Shape + ExtrudeGeometry', 'SECC');
+  coverGroup.add(cover);
+
+  // rack ears
+  for (const side of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.24, H - 0.12, 5.5), matCase);
+    ear.position.set(side * (hw + 0.12), 0, hd - 2.75);
+    baseGroup.add(ear);
+    const flange = new THREE.Mesh(new THREE.BoxGeometry(2.0, H - 0.12, 0.24), matCase);
+    flange.position.set(side * (hw - 0.9), 0, hd - 0.12);
+    baseGroup.add(flange);
+    for (const sy of [-1.4, 1.4]) {
+      const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.1, 10), matShield);
+      sc.rotation.x = Math.PI / 2;
+      sc.position.set(side * (hw - 0.9), sy, hd + 0.02);
+      baseGroup.add(sc);
+    }
+  }
+
+  // ---------- front panel ----------
+  const frontZ = hd;
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), matFront);
+  face.position.set(0, 0, frontZ + 0.06);
+  face.name = 'Odf_FrontPanel';
+  tag(face, '前面板丝印', '品牌、端口编号、光纤类型与熔接盘标识。', 'PlaneGeometry + CanvasTexture', 'Silkscreen');
+  frontGroup.add(face);
+
+  // 24 LC duplex adapters (2 rows × 12)
+  const adapterGeo = new THREE.BoxGeometry(1.15, 0.86, 1.35);
+  const portGeo = new THREE.BoxGeometry(0.38, 0.3, 1.42);
+  const portInnerGeo = new THREE.BoxGeometry(0.24, 0.18, 1.46);
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 12; i++) {
+      const n = row * 12 + i + 1;
+      const x = ax(i);
+      const y = row === 0 ? 0.85 : -0.85;
+      const adapter = new THREE.Mesh(adapterGeo, row === 0 ? matBlue : matGreen);
+      adapter.position.set(x, y, frontZ - 0.35);
+      adapter.name = `Odf_LcAdapter_${n}`;
+      tag(adapter, `LC 双工适配器 #${n}`, '陶瓷套管 LC 双工法兰，蓝色 UPC / 绿色 APC。', 'BoxGeometry', 'PBT + Ceramic');
+      frontGroup.add(adapter);
+
+      for (const dx of [-0.25, 0.25]) {
+        const port = new THREE.Mesh(portGeo, matShield);
+        port.position.set(x + dx, y, frontZ + 0.35);
+        const inner = new THREE.Mesh(portInnerGeo, matBlack);
+        inner.position.set(x + dx, y, frontZ + 0.38);
+        frontGroup.add(port, inner);
+      }
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.2, 8), matRubber);
+      cap.rotation.x = Math.PI / 2;
+      cap.position.set(x, y - 0.25, frontZ + 0.6);
+      frontGroup.add(cap);
+    }
+  }
+
+  // ---------- internal splice tray ----------
+  const trayBase = new THREE.Mesh(new THREE.BoxGeometry(38, 0.35, 22), matShield);
+  trayBase.position.set(0, -1.45, -0.5);
+  trayBase.name = 'Odf_SpliceTray';
+  tag(trayBase, '24 芯熔接盘', '可翻转熔接盘，容纳 24 个热缩保护管与盘纤。', 'BoxGeometry', 'ABS + Steel');
+  trayGroup.add(trayBase);
+
+  const trayCover = new THREE.Mesh(new THREE.BoxGeometry(34, 0.2, 18), matBlack);
+  trayCover.position.set(0, -1.2, -0.5);
+  trayGroup.add(trayCover);
+
+  // coiled fibers on tray
+  for (let c = 0; c < 4; c++) {
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(5.5 + c * 0.6, 0.12, 8, 40), matFiber);
+    coil.rotation.x = Math.PI / 2;
+    coil.position.set(-7 + c * 1.0, -1.0, -2.5);
+    trayGroup.add(coil);
+  }
+
+  // heat-shrink protectors
+  const hsGeo = new THREE.CylinderGeometry(0.11, 0.11, 3.2, 8);
+  hsGeo.rotateZ(Math.PI / 2);
+  for (let i = 0; i < 12; i++) {
+    const hs = new THREE.Mesh(hsGeo, matBlack);
+    hs.position.set(-11 + i * 1.6, -0.98, 2.8);
+    trayGroup.add(hs);
+  }
+
+  // adapter mounting plate (behind front panel)
+  const mount = new THREE.Mesh(new THREE.BoxGeometry(40, 3.6, 0.25), matCase);
+  mount.position.set(0, 0, frontZ - 1.2);
+  frontGroup.add(mount);
+
+  // rear cable entry + strength member clamp
+  const rearZ = -hd;
+  const grommet = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.6, 20), matRubber);
+  grommet.rotation.x = Math.PI / 2;
+  grommet.position.set(-8, -0.9, rearZ + 0.2);
+  trayGroup.add(grommet);
+
+  const clamp = new THREE.Mesh(new THREE.BoxGeometry(6, 0.8, 1.2), matShield);
+  clamp.position.set(-8, -1.6, rearZ + 1.4);
+  trayGroup.add(clamp);
+
+  // ---------- front patch cords ----------
+  for (let i = 0; i < 8; i++) {
+    const x = ax(i * 1.5 < 12 ? i * 1.5 : 11) + (i % 2) * 0.3;
+    const y0 = i % 2 === 0 ? 0.85 : -0.85;
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(x, y0, frontZ + 0.7),
+      new THREE.Vector3(x, y0 - 0.5, frontZ + 2.6),
+      new THREE.Vector3(x + 0.6, -1.6, frontZ + 3.8),
+      new THREE.Vector3(x + 1.2, -2.4, frontZ + 4.6),
+    ]);
+    const cord = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.09, 8, false), matFiber);
+    cord.name = `Odf_PatchCord_${i + 1}`;
+    patchGroup.add(cord);
+  }
+
+  // front horizontal cable management bar + rings
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(34, 0.35, 0.35), matShield);
+  bar.position.set(0, -1.85, frontZ + 2.2);
+  patchGroup.add(bar);
+  for (const rx of [-12, -4, 4, 12]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.08, 8, 20), matShield);
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(rx, -1.85, frontZ + 2.2);
+    patchGroup.add(ring);
+  }
+
+  markShell(coverGroup);
+  markShell(baseGroup);
+  trayGroup.visible = false;   // 默认只看外观，点「查看内部」再显示熔接盘
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { baseGroup, coverGroup, frontGroup, trayGroup, patchGroup },
+    onShellToggle: (on) => { trayGroup.visible = !on; },
+  };
+  return root;
+}
+
+// monitor-4k.js — 27 寸 4K 安防监视器
+// 三边窄边框、金属底座、4 分屏实时预览；后壳可透视看到主板/电源板/扬声器。
+// 单位：厘米(cm)。屏幕 60×33.8，外框 62.2×36，front +Z，root 旋转 180°。
+function buildMonitor4K(THREE) {
+  const { roundedRectShape, roundedRectWithHole, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'SecurityMonitor4K';
+
+  const shellGroup = new THREE.Group(); shellGroup.name = 'MonShellGroup';
+  const panelGroup = new THREE.Group(); panelGroup.name = 'MonPanelGroup';
+  const standGroup = new THREE.Group(); standGroup.name = 'MonStandGroup';
+  const internalGroup = new THREE.Group(); internalGroup.name = 'MonInternalGroup';
+  root.add(shellGroup, panelGroup, standGroup, internalGroup);
+
+  // ---------- materials ----------
+  const matBezel = mat(THREE, 'physical', 'MonBezelBlack', {
+    color: 0x111317, metalness: 0.25, roughness: 0.42, clearcoat: 0.2,
+  });
+  const matBack = mat(THREE, 'physical', 'MonBackCover', {
+    color: 0x1a1d22, metalness: 0.3, roughness: 0.5,
+  });
+  const matStand = mat(THREE, 'physical', 'MonStandMetal', {
+    color: 0x6b737b, metalness: 0.8, roughness: 0.3,
+  });
+  const matBlack = mat(THREE, 'standard', 'MonBlackPlastic', {
+    color: 0x0c0e11, metalness: 0.1, roughness: 0.65,
+  });
+  const matShield = mat(THREE, 'physical', 'MonNickel', {
+    color: 0xc8d0d6, metalness: 0.9, roughness: 0.22,
+  });
+  const matPcb = mat(THREE, 'standard', 'MonPcbGreen', {
+    color: 0x0b3d2a, metalness: 0.15, roughness: 0.6,
+  });
+  const matGold = mat(THREE, 'physical', 'MonGold', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+  const matSpeaker = mat(THREE, 'standard', 'MonSpeakerCone', {
+    color: 0x1b1e22, roughness: 0.85,
+  });
+
+  // ---------- screen texture ----------
+  const { c: sc, ctx: s } = canvas(1280, 720);
+  s.fillStyle = '#05080c'; s.fillRect(0, 0, 1280, 720);
+  const rgb = ['#22c55e', '#3b82f6', '#f59e0b', '#a78bfa'];
+  const names = ['大门入口', '实验室走廊', '危化品库', '周界东侧'];
+  for (let r = 0; r < 2; r++) {
+    for (let col = 0; col < 2; col++) {
+      const gx = col * 640, gy = r * 360;
+      const grd = s.createLinearGradient(gx, gy, gx + 640, gy + 360);
+      grd.addColorStop(0, '#1a2430'); grd.addColorStop(0.6, '#0d141b'); grd.addColorStop(1, '#070b10');
+      s.fillStyle = grd; s.fillRect(gx + 2, gy + 2, 636, 316);
+      s.strokeStyle = 'rgba(56,189,248,0.45)'; s.lineWidth = 2;
+      s.strokeRect(gx + 2, gy + 2, 636, 316);
+
+      // 模拟场景：地面透视线 + 货架/门框
+      s.strokeStyle = 'rgba(148,163,184,0.22)'; s.lineWidth = 1;
+      for (let k = 0; k < 6; k++) {
+        s.beginPath();
+        s.moveTo(gx + 40 + k * 100, gy + 300);
+        s.lineTo(gx + 300 + k * 20, gy + 150);
+        s.stroke();
+      }
+      s.strokeStyle = 'rgba(148,163,184,0.35)';
+      s.strokeRect(gx + 80, gy + 90, 90, 140);
+      s.strokeRect(gx + 470, gy + 70, 100, 170);
+
+      s.fillStyle = rgb[r * 2 + col];
+      s.font = 'bold 22px "JetBrains Mono", monospace';
+      s.fillText(`CH ${r * 2 + col + 1}`, gx + 18, gy + 34);
+      s.fillStyle = 'rgba(226,232,240,0.9)';
+      s.font = '16px Inter, Arial, sans-serif';
+      s.fillText(names[r * 2 + col], gx + 90, gy + 34);
+      s.fillStyle = '#ef4444';
+      s.font = 'bold 16px "JetBrains Mono", monospace';
+      s.fillText('● REC  4K', gx + 520, gy + 34);
+    }
+  }
+  // 中央分隔线
+  s.strokeStyle = 'rgba(56,189,248,0.6)'; s.lineWidth = 3;
+  s.beginPath(); s.moveTo(640, 0); s.lineTo(640, 720); s.stroke();
+  s.beginPath(); s.moveTo(0, 360); s.lineTo(1280, 360); s.stroke();
+  // 底部状态条
+  s.fillStyle = 'rgba(2,6,12,0.78)'; s.fillRect(0, 676, 1280, 44);
+  s.fillStyle = '#38bdf8'; s.font = 'bold 18px "JetBrains Mono", monospace';
+  s.fillText('2026-10-29  14:32:08', 24, 704);
+  s.fillStyle = '#94a3b8'; s.font = '16px "JetBrains Mono", monospace';
+  s.fillText('4-CH LIVE VIEW  ·  H.265+  ·  HDD 68%', 330, 704);
+  s.fillStyle = '#22c55e'; s.font = 'bold 17px "JetBrains Mono", monospace';
+  s.fillText('● ONLINE 128', 1010, 704);
+  const screenTex = canvasTexture(THREE, sc);
+
+  // ---------- front bezel ----------
+  const SW = 60, SH = 33.8;          // screen
+  const BW = 62.2, BH = 36;          // outer bezel
+  const bezelShape = roundedRectWithHole(THREE, BW, BH, 0.8, SW, SH, 0.2);
+  const bezelGeo = new THREE.ExtrudeGeometry(bezelShape, {
+    depth: 1.0, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 3,
+  });
+  bezelGeo.translate(0, 0, -0.5);
+  const bezel = new THREE.Mesh(bezelGeo, matBezel);
+  bezel.position.z = 0.5;
+  bezel.castShadow = true; bezel.receiveShadow = true;
+  bezel.name = 'Mon_FrontBezel';
+  tag(bezel, '三边窄边框', '62.2×36cm 黑色金属窄边框，屏占比约 96%。', 'ExtrudeGeometry + Hole', 'Aluminum');
+  panelGroup.add(bezel);
+
+  // screen
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(SW, SH),
+    new THREE.MeshBasicMaterial({ name: 'MonScreenMat', map: screenTex })
+  );
+  screen.position.z = 0.08;
+  screen.name = 'Mon_Screen';
+  tag(screen, '27 寸 4K 液晶屏', '3840×2160 IPS 面板，4 分屏实时预览。', 'PlaneGeometry + CanvasTexture', 'IPS LCD');
+  panelGroup.add(screen);
+
+  // screen glass
+  const glass = new THREE.Mesh(
+    new THREE.PlaneGeometry(SW - 0.2, SH - 0.2),
+    new THREE.MeshPhysicalMaterial({
+      name: 'MonScreenGlass', color: 0xffffff, transparent: true, opacity: 0.05,
+      roughness: 0.08, clearcoat: 0.6,
+    })
+  );
+  glass.position.z = 0.12;
+  panelGroup.add(glass);
+
+  // bottom bezel logo
+  const { c: lc, ctx: lctx } = canvas(512, 96);
+  lctx.fillStyle = '#111317'; lctx.fillRect(0, 0, 512, 96);
+  label(lctx, 'HIKVISION', 24, 48, { px: 42, color: '#e5e7eb', mono: false });
+  label(lctx, '4K UHD  ·  27"', 300, 52, { px: 18, color: '#6b7280' });
+  const logoTex = canvasTexture(THREE, lc);
+  const logoPlate = new THREE.Mesh(
+    new THREE.PlaneGeometry(10, 2.0),
+    new THREE.MeshStandardMaterial({ name: 'MonLogoPlate', map: logoTex, roughness: 0.5 })
+  );
+  logoPlate.position.set(0, -16.9, 1.06);
+  panelGroup.add(logoPlate);
+
+  // OSD buttons bottom-right
+  for (let i = 0; i < 5; i++) {
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 14), matBlack);
+    btn.rotation.x = Math.PI / 2;
+    btn.position.set(20 + i * 1.1, -16.7, 1.06);
+    panelGroup.add(btn);
+  }
+  const pwrLed = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 0.1, 10),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.0, roughness: 0.2 })
+  );
+  pwrLed.rotation.x = Math.PI / 2;
+  pwrLed.position.set(26.8, -16.7, 1.06);
+  panelGroup.add(pwrLed);
+
+  // ---------- rear cover ----------
+  const backShape = roundedRectShape(THREE, BW - 1.0, BH - 1.0, 0.7);
+  const backGeo = new THREE.ExtrudeGeometry(backShape, {
+    depth: 3.6, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.15, bevelSegments: 3,
+  });
+  backGeo.translate(0, 0, -3.6);   // 向 -Z 方向拉伸，形成后壳
+  const back = new THREE.Mesh(backGeo, matBack);
+  back.position.set(0, 0, -0.5);
+  back.castShadow = true;
+  back.name = 'Mon_BackCover';
+  tag(back, '后壳', '内置主板、电源板、扬声器与 VESA 安装孔。', 'ExtrudeGeometry', 'ABS + Steel');
+  shellGroup.add(back);
+
+  // VESA plate
+  const vesa = new THREE.Mesh(new THREE.BoxGeometry(11, 11, 0.5), matShield);
+  vesa.position.set(0, 0, -4.3);
+  shellGroup.add(vesa);
+  const holeGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.6, 12);
+  holeGeo.rotateX(Math.PI / 2);
+  for (const vx of [-3.5, 3.5]) {
+    for (const vy of [-3.5, 3.5]) {
+      const h = new THREE.Mesh(holeGeo, matBlack);
+      h.position.set(vx, vy, -4.3);
+      shellGroup.add(h);
+    }
+  }
+
+  // rear IO panel
+  const ioPanel = new THREE.Mesh(new THREE.BoxGeometry(24, 7, 0.3), matBlack);
+  ioPanel.position.set(0, -12, -4.4);
+  shellGroup.add(ioPanel);
+  const ioDefs = [
+    { x: -9.5, w: 2.2, h: 1.0, c: 0x0d0f12 },  // HDMI 1
+    { x: -6.5, w: 2.2, h: 1.0, c: 0x0d0f12 },  // HDMI 2
+    { x: -3.5, w: 2.4, h: 1.2, c: 0x1d4ed8 },  // DP
+    { x: -0.5, w: 2.4, h: 1.2, c: 0x1d4ed8 },  // VGA
+    { x: 3.0, w: 1.6, h: 0.8, c: 0x0d0f12 },   // audio
+    { x: 6.0, w: 2.0, h: 1.2, c: 0x0d0f12 },   // USB
+  ];
+  for (const d of ioDefs) {
+    const port = new THREE.Mesh(new THREE.BoxGeometry(d.w, d.h, 0.5), matShield);
+    port.position.set(d.x, -12, -4.55);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(d.w - 0.4, d.h - 0.3, 0.55), new THREE.MeshBasicMaterial({ color: d.c }));
+    inner.position.set(d.x, -12, -4.58);
+    shellGroup.add(port, inner);
+  }
+  // power inlet
+  const pwr = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, 0.8), matBlack);
+  pwr.position.set(9.5, -12, -4.5);
+  shellGroup.add(pwr);
+
+  // ---------- stand ----------
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(7, 18, 2.2), matStand);
+  neck.position.set(0, -25, -2.2);
+  neck.castShadow = true;
+  neck.name = 'Mon_StandNeck';
+  tag(neck, '金属支架颈', '支持 -5°~15° 俯仰调节。', 'BoxGeometry', 'Die-cast Aluminum');
+  standGroup.add(neck);
+
+  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 7.5, 20), matBlack);
+  hinge.rotation.z = Math.PI / 2;
+  hinge.position.set(0, -16.8, -2.2);
+  standGroup.add(hinge);
+
+  const baseShape = roundedRectShape(THREE, 30, 20, 2.0);
+  const baseGeo = new THREE.ExtrudeGeometry(baseShape, {
+    depth: 1.1, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 3,
+  });
+  baseGeo.rotateX(-Math.PI / 2);
+  const base = new THREE.Mesh(baseGeo, matStand);
+  base.position.set(0, -34, 0.5);
+  base.castShadow = true; base.receiveShadow = true;
+  base.name = 'Mon_StandBase';
+  standGroup.add(base);
+
+  // ---------- internals ----------
+  const mainPcb = new THREE.Mesh(new THREE.BoxGeometry(28, 0.3, 16), matPcb);
+  mainPcb.position.set(0, -1.5, -2.2);
+  mainPcb.name = 'Mon_MainPcb';
+  tag(mainPcb, '显示驱动主板', '4K 缩放芯片、HDMI/DP 接收器与背光控制。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(mainPcb);
+
+  const pwrPcb = new THREE.Mesh(new THREE.BoxGeometry(18, 0.3, 10), matPcb);
+  pwrPcb.position.set(-8, -3.0, -2.2);
+  pwrPcb.name = 'Mon_PowerPcb';
+  tag(pwrPcb, '电源板', '内置 120W 开关电源，输出 19V/6A。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(pwrPcb);
+
+  const icGeo = new THREE.BoxGeometry(2.2, 0.5, 2.2);
+  for (let i = 0; i < 3; i++) {
+    const ic = new THREE.Mesh(icGeo, matBlack);
+    ic.position.set(-5 + i * 5, 0.2, -2.2);
+    internalGroup.add(ic);
+  }
+  const capGeo = new THREE.CylinderGeometry(0.6, 0.6, 1.8, 14);
+  for (let i = 0; i < 3; i++) {
+    const cap = new THREE.Mesh(capGeo, matGold);
+    cap.position.set(-15 + i * 2, -2.4, -2.2);
+    internalGroup.add(cap);
+  }
+
+  // speakers left/right
+  for (const sx of [-24, 24]) {
+    const sp = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 3), matSpeaker);
+    sp.position.set(sx, 0, -2.4);
+    internalGroup.add(sp);
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.4, 24), matBlack);
+    cone.rotation.x = Math.PI / 2;
+    cone.position.set(sx, 0, -1.0);
+    internalGroup.add(cone);
+  }
+
+  // T-con board at top
+  const tcon = new THREE.Mesh(new THREE.BoxGeometry(22, 0.25, 5), matPcb);
+  tcon.position.set(0, 15, -1.6);
+  internalGroup.add(tcon);
+
+  markShell(shellGroup);
+  internalGroup.visible = false;   // 默认只看外观，点「查看内部」再显示
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { shellGroup, panelGroup, standGroup, internalGroup },
+    onShellToggle: (on) => {
+      internalGroup.visible = !on;
+      // 拆开后壳时把屏幕/玻璃一起隐藏，方便从正面看内部
+      screen.visible = on;
+      glass.visible = on;
+    },
+  };
+  return root;
+}
+
+// video-server.js — 2U 视频服务器 / 解码服务器
+// 8 个 2.5" 热插拔盘位、双路 CPU 散热、RAID 卡、冗余电源与 4 个热插拔风扇。
+// 单位：厘米(cm)。外形 44 × 8.8 × 65。front +Z，root 旋转 180°。
+function buildVideoServer(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'VideoServer2U';
+
+  const baseGroup = new THREE.Group(); baseGroup.name = 'VsBaseGroup';
+  const coverGroup = new THREE.Group(); coverGroup.name = 'VsCoverGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'VsFrontGroup';
+  const rearGroup = new THREE.Group(); rearGroup.name = 'VsRearGroup';
+  const internalGroup = new THREE.Group(); internalGroup.name = 'VsInternalGroup';
+  const hddGroup = new THREE.Group(); hddGroup.name = 'VsHddGroup';
+  root.add(baseGroup, coverGroup, frontGroup, rearGroup, internalGroup, hddGroup);
+
+  const W = 44, H = 8.8, D = 65;
+  const hw = W / 2, hh = H / 2, hd = D / 2;
+  const wall = 0.16;
+
+  // ---------- materials ----------
+  const matCase = mat(THREE, 'physical', 'VsCaseMetal', { color: 0x1b1f25, metalness: 0.72, roughness: 0.42 });
+  const matCover = mat(THREE, 'physical', 'VsCoverMetal', { color: 0x20252c, metalness: 0.72, roughness: 0.4 });
+  const matEar = mat(THREE, 'physical', 'VsRackEar', { color: 0x16191e, metalness: 0.8, roughness: 0.38 });
+  const matShield = mat(THREE, 'physical', 'VsNickel', { color: 0xc8d0d6, metalness: 0.9, roughness: 0.22 });
+  const matBlack = mat(THREE, 'standard', 'VsBlackPlastic', { color: 0x0e1014, metalness: 0.1, roughness: 0.64 });
+  const matGold = mat(THREE, 'physical', 'VsGold', { color: 0xfbbf24, metalness: 0.95, roughness: 0.14 });
+  const matCopper = mat(THREE, 'physical', 'VsCopper', { color: 0xd97706, metalness: 0.9, roughness: 0.25 });
+  const matRubber = mat(THREE, 'standard', 'VsRubber', { color: 0x0a0b0d, roughness: 0.9 });
+  const matHeatsink = mat(THREE, 'physical', 'VsHeatsink', { color: 0x2a2f36, metalness: 0.85, roughness: 0.3 });
+  const matPcb = mat(THREE, 'standard', 'VsPcbGreen', { color: 0x0b3d2a, metalness: 0.15, roughness: 0.6 });
+  const matHdd = mat(THREE, 'physical', 'VsHddCase', { color: 0x2a2e34, metalness: 0.6, roughness: 0.45 });
+  const matPsu = mat(THREE, 'physical', 'VsPsuAlum', { color: 0x94a3b8, metalness: 0.85, roughness: 0.3 });
+
+  // ---------- front silkscreen ----------
+  const PW = W - 0.4, PH = H - 0.4;
+  const CW = 2048, CH = Math.round(CW * PH / PW);
+  const { c: fc, ctx: f } = canvas(CW, CH);
+  const PX = x => (x / PW + 0.5) * CW;
+  const PY = y => (0.5 - y / PH) * CH;
+
+  const g = f.createLinearGradient(0, 0, CW, CH);
+  g.addColorStop(0, '#1a1e24'); g.addColorStop(0.5, '#22272e'); g.addColorStop(1, '#171b21');
+  f.fillStyle = g; f.fillRect(0, 0, CW, CH);
+  for (let y = 0; y < CH; y += 3) {
+    f.strokeStyle = 'rgba(255,255,255,0.02)'; f.lineWidth = 1;
+    f.beginPath(); f.moveTo(0, y); f.lineTo(CW, y); f.stroke();
+  }
+  f.fillStyle = '#dc2626'; f.fillRect(PX(-21.6), PY(4.12), PX(21.6) - PX(-21.6), 5);
+
+  label(f, 'HIKVISION', PX(-21.4), PY(3.62), { px: 20, color: '#f8fafc', mono: false });
+  label(f, 'DS-VS2000', PX(-16.0), PY(3.62), { px: 11, color: '#94a3b8' });
+  label(f, '2U VIDEO SERVER  ·  8×2.5" SAS/SATA  ·  DUAL XEON', PX(-21.4), PY(3.22), { px: 9, color: '#64748b' });
+  label(f, 'RAID 0/1/5/6/10  ·  10GbE SFP+  ·  REDUNDANT PSU', PX(21.4), PY(3.62), { px: 9, color: '#94a3b8', align: 'right' });
+
+  // right control panel labels
+  label(f, 'PWR', PX(11.0), PY(2.0), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'SYS', PX(11.0), PY(1.4), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'NET', PX(11.0), PY(0.8), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'ALM', PX(11.0), PY(0.2), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'USB 3.0', PX(18.2), PY(0.0), { px: 7, color: '#0ea5e9', align: 'center' });
+  label(f, 'RESET', PX(18.2), PY(-1.0), { px: 7, color: '#64748b', align: 'center' });
+  label(f, 'ASSET: SEC-BLDG-A3-RACK01-VS01  ·  S/N VS20261029007', PX(0), PY(-4.02), { px: 9, color: '#64748b', align: 'center' });
+
+  const frontTex = canvasTexture(THREE, fc);
+  const matFront = mat(THREE, 'standard', 'VsFrontSilk', { map: frontTex, roughness: 0.42, metalness: 0.35 });
+
+  // ---------- chassis ----------
+  const uShape = new THREE.Shape();
+  uShape.moveTo(-hw, hh - 0.12);
+  uShape.lineTo(-hw, -hh + 0.1);
+  uShape.quadraticCurveTo(-hw, -hh, -hw + 0.1, -hh);
+  uShape.lineTo(hw - 0.1, -hh);
+  uShape.quadraticCurveTo(hw, -hh, hw, -hh + 0.1);
+  uShape.lineTo(hw, hh - 0.12);
+  uShape.lineTo(hw - wall, hh - 0.12);
+  uShape.lineTo(hw - wall, -hh + wall);
+  uShape.lineTo(-hw + wall, -hh + wall);
+  uShape.lineTo(-hw + wall, hh - 0.12);
+  uShape.closePath();
+  const uGeo = new THREE.ExtrudeGeometry(uShape, {
+    depth: D - 0.4, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2,
+  });
+  uGeo.translate(0, 0, -(D - 0.4) / 2);
+  const uBody = new THREE.Mesh(uGeo, matCase);
+  uBody.name = 'Vs_UChassis';
+  uBody.castShadow = true; uBody.receiveShadow = true;
+  tag(uBody, '2U U 型下机壳', '1.2mm 镀锌钢板折弯，深灰喷塑，承载主板、硬盘笼与冗余电源。', 'Shape + ExtrudeGeometry', 'SGCC');
+  baseGroup.add(uBody);
+
+  const coverShape = roundedRectShape(THREE, W - 0.08, D - 0.3, 0.24);
+  const coverGeo = new THREE.ExtrudeGeometry(coverShape, {
+    depth: 0.14, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  coverGeo.rotateX(Math.PI / 2);
+  const cover = new THREE.Mesh(coverGeo, matCover);
+  cover.position.y = hh;
+  cover.name = 'Vs_TopCover';
+  cover.castShadow = true;
+  tag(cover, '可拆卸顶盖', '顶盖带散热窗与加强筋，可透视查看双 CPU 与硬盘笼。', 'Shape + ExtrudeGeometry', 'SGCC');
+  coverGroup.add(cover);
+
+  // top vents
+  const ventGeo = new THREE.BoxGeometry(26, 0.04, 0.3);
+  for (let i = 0; i < 8; i++) {
+    const v = new THREE.Mesh(ventGeo, matBlack);
+    v.position.set(-4, hh + 0.08, -20 + i * 5);
+    coverGroup.add(v);
+  }
+
+  // rack ears
+  for (const side of [-1, 1]) {
+    const sidePlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, H - 0.14, 8), matEar);
+    sidePlate.position.set(side * (hw + 0.13), 0, hd - 4);
+    baseGroup.add(sidePlate);
+    const flange = new THREE.Mesh(new THREE.BoxGeometry(2.0, H - 0.14, 0.26), matEar);
+    flange.position.set(side * (hw - 0.9), 0, hd - 0.13);
+    baseGroup.add(flange);
+    for (const sy of [-2.6, 2.6]) {
+      const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 10), matShield);
+      sc.rotation.x = Math.PI / 2;
+      sc.position.set(side * (hw - 0.9), sy, hd + 0.02);
+      baseGroup.add(sc);
+    }
+  }
+
+  // ---------- front bezel ----------
+  const frontZ = hd;
+  const bezelShape = roundedRectShape(THREE, W + 0.04, H + 0.02, 0.2);
+  const bezelGeo = new THREE.ExtrudeGeometry(bezelShape, {
+    depth: 0.36, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3,
+  });
+  bezelGeo.translate(0, 0, -0.18);
+  const bezel = new THREE.Mesh(bezelGeo, matCase);
+  bezel.position.z = frontZ;
+  bezel.castShadow = true;
+  frontGroup.add(bezel);
+
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), matFront);
+  face.position.set(0, 0, frontZ + 0.26);
+  face.name = 'Vs_FrontPanel';
+  tag(face, '前面板丝印', '品牌、型号、RAID/10GbE 规格、状态灯与资产编号。', 'PlaneGeometry + CanvasTexture', 'Silkscreen');
+  frontGroup.add(face);
+
+  // 8 hot-swap 2.5" bays: 4 columns × 2 rows
+  const bayW = 4.8, bayH = 2.5;
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 4; col++) {
+      const n = row * 4 + col + 1;
+      const bx = -16.0 + col * 6.0;
+      const by = 1.55 - row * 3.1;
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(bayW, bayH, 0.9), matShield);
+      frame.position.set(bx, by, frontZ + 0.22);
+      const door = new THREE.Mesh(new THREE.BoxGeometry(bayW - 0.35, bayH - 0.35, 0.35), matBlack);
+      door.position.set(bx, by, frontZ + 0.72);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 0.4), matShield);
+      handle.position.set(bx + bayW / 2 - 0.55, by, frontZ + 0.92);
+      const led = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+        new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.0, roughness: 0.2 })
+      );
+      led.rotation.x = Math.PI / 2;
+      led.position.set(bx - bayW / 2 + 0.45, by + bayH / 2 - 0.35, frontZ + 0.92);
+      tag(door, `2.5" 热插拔盘位 ${n}`, 'SAS/SATA 热插拔硬盘托架，带锁扣与活动指示灯。', 'BoxGeometry', 'Aluminum Tray');
+      frontGroup.add(frame, door, handle, led);
+    }
+  }
+
+  // right control panel: power button + LEDs + USB + reset
+  const pwrBtn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.55, 0.2, 20),
+    new THREE.MeshStandardMaterial({ color: 0x1a1d22, emissive: 0x0b3d1f, emissiveIntensity: 0.5, roughness: 0.35 })
+  );
+  pwrBtn.rotation.x = Math.PI / 2;
+  pwrBtn.position.set(14.0, -1.8, frontZ + 0.35);
+  const pwrLed = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.2, roughness: 0.2 })
+  );
+  pwrLed.rotation.x = Math.PI / 2;
+  pwrLed.position.set(14.0, -1.8, frontZ + 0.48);
+  frontGroup.add(pwrBtn, pwrLed);
+
+  const ledCols = [0x22c55e, 0x3b82f6, 0x06b6d4, 0xef4444];
+  ledCols.forEach((c, i) => {
+    const led = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+      new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.9, roughness: 0.2 })
+    );
+    led.rotation.x = Math.PI / 2;
+    led.position.set(11.0, 2.0 - i * 0.6, frontZ + 0.32);
+    frontGroup.add(led);
+  });
+
+  // USB
+  for (let i = 0; i < 2; i++) {
+    const usb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 0.5), matShield);
+    usb.position.set(18.2 + i * 1.3, -0.0, frontZ + 0.3);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.25, 0.55), matBlack);
+    inner.position.set(18.2 + i * 1.3, -0.0, frontZ + 0.42);
+    frontGroup.add(usb, inner);
+  }
+  const rst = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.2, 8), matBlack);
+  rst.rotation.x = Math.PI / 2;
+  rst.position.set(18.2, -1.0, frontZ + 0.4);
+  frontGroup.add(rst);
+
+  // ---------- rear panel ----------
+  const rearZ = -hd;
+  const rearPlate = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, H - 0.2, 0.22), matCase);
+  rearPlate.position.set(0, 0, rearZ + 0.11);
+  rearGroup.add(rearPlate);
+
+  // IO ports left half
+  const ioY = 0.8;
+  const sfpXs = [-18.5, -15.5];
+  for (const sx of sfpXs) {
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.1, 1.8), matShield);
+    cage.position.set(sx, ioY, rearZ - 0.55);
+    const cav = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.7, 1.85), matBlack);
+    cav.position.set(sx, ioY, rearZ - 0.5);
+    rearGroup.add(cage, cav);
+  }
+  for (let i = 0; i < 4; i++) {
+    const rx = -10.5 + i * 2.2;
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.5), matShield);
+    cage.position.set(rx, ioY, rearZ - 0.35);
+    const cav = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.68, 1.55), matBlack);
+    cav.position.set(rx, ioY, rearZ - 0.3);
+    rearGroup.add(cage, cav);
+    for (let p = 0; p < 8; p++) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.18, 0.45), matGold);
+      pin.position.set(rx - 0.35 + p * 0.1, ioY + 0.22, rearZ - 0.1);
+      rearGroup.add(pin);
+    }
+  }
+  // VGA
+  const vga = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 0.8), matShield);
+  vga.position.set(1.0, ioY, rearZ - 0.2);
+  const vgaIn = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.9, 0.85), matBlack);
+  vgaIn.position.set(1.0, ioY, rearZ - 0.18);
+  rearGroup.add(vga, vgaIn);
+  // USB
+  for (let i = 0; i < 2; i++) {
+    const usb = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.7), matShield);
+    usb.position.set(4.5 + i * 1.6, ioY, rearZ - 0.15);
+    rearGroup.add(usb);
+  }
+  // IPMI
+  const ipmi = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.4), matShield);
+  ipmi.position.set(8.5, ioY, rearZ - 0.35);
+  rearGroup.add(ipmi);
+
+  // redundant PSUs
+  for (let i = 0; i < 2; i++) {
+    const px = 12.5 + i * 7.2;
+    const psu = new THREE.Mesh(new THREE.BoxGeometry(6.6, 3.6, 14), matPsu);
+    psu.position.set(px, -1.8, rearZ + 7.2);
+    tag(psu, `冗余电源 ${i + 1}`, '800W 80+ Platinum 热插拔冗余电源。', 'BoxGeometry', 'Aluminum');
+    rearGroup.add(psu);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.5, 0.5), matBlack);
+    handle.position.set(px, -0.4, rearZ - 0.2);
+    rearGroup.add(handle);
+    const fan = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.2, 20), matBlack);
+    fan.rotation.x = Math.PI / 2;
+    fan.position.set(px, -1.8, rearZ - 0.2);
+    rearGroup.add(fan);
+  }
+
+  // rear fans (4)
+  for (let i = 0; i < 4; i++) {
+    const fx = -18 + i * 4.2;
+    const fan = new THREE.Group();
+    fan.position.set(fx, 2.8, rearZ + 0.2);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.6, 1.0), matBlack);
+    frame.position.z = 0.3;
+    fan.add(frame);
+    const tunnel = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 1.1, 20), new THREE.MeshBasicMaterial({ color: 0x06080c }));
+    tunnel.rotation.x = Math.PI / 2;
+    fan.add(tunnel);
+    const rotor = new THREE.Group();
+    rotor.position.z = 0.1;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.5, 14), matBlack);
+    hub.rotation.x = Math.PI / 2;
+    rotor.add(hub);
+    const bg = new THREE.BoxGeometry(0.9, 0.32, 0.05);
+    for (let b = 0; b < 7; b++) {
+      const bp = new THREE.Group();
+      bp.rotation.z = (b / 7) * Math.PI * 2;
+      const bm = new THREE.Mesh(bg, matBlack);
+      bm.position.x = 0.95; bm.rotation.x = 0.5;
+      bp.add(bm); rotor.add(bp);
+    }
+    fan.add(rotor);
+    rearGroup.add(fan);
+  }
+
+  // rear labels (canvas texture on a thin plane above PSUs)
+  const { c: rc, ctx: r } = canvas(1024, 256);
+  r.fillStyle = '#181c24'; r.fillRect(0, 0, 1024, 256);
+  label(r, '10GbE SFP+  ·  GE RJ45  ·  IPMI  ·  REDUNDANT 800W', 24, 36, { px: 18, color: '#94a3b8' });
+  label(r, 'PSU1', 700, 220, { px: 16, color: '#cbd5e1' });
+  label(r, 'PSU2', 880, 220, { px: 16, color: '#cbd5e1' });
+  const rearTex = canvasTexture(THREE, rc);
+  const rearLabel = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 5),
+    new THREE.MeshBasicMaterial({ map: rearTex, transparent: true })
+  );
+  rearLabel.rotation.y = Math.PI;
+  rearLabel.position.set(-4, 3.2, rearZ - 0.02);
+  rearGroup.add(rearLabel);
+
+  // ---------- internals ----------
+  const mainPcb = new THREE.Mesh(new THREE.BoxGeometry(36, 0.25, 42), matPcb);
+  mainPcb.position.set(-3, -2.8, -3);
+  mainPcb.name = 'Vs_Mainboard';
+  tag(mainPcb, '双路服务器主板', '支持双 Xeon、8 通道 DDR4、PCIe 4.0 与 RAID 卡。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(mainPcb);
+
+  // 2 CPU heatsinks
+  for (let c = 0; c < 2; c++) {
+    const hx = -10 + c * 9;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(7, 0.4, 7), matHeatsink);
+    base.position.set(hx, -2.2, -2);
+    internalGroup.add(base);
+    const finGeo = new THREE.BoxGeometry(0.14, 2.2, 7);
+    for (let i = 0; i < 12; i++) {
+      const fin = new THREE.Mesh(finGeo, matHeatsink);
+      fin.position.set(hx - 3.2 + i * 0.58, -0.9, -2);
+      internalGroup.add(fin);
+    }
+  }
+
+  // RAM sticks
+  const ramGeo = new THREE.BoxGeometry(0.25, 1.4, 6);
+  for (let b = 0; b < 2; b++) {
+    for (let i = 0; i < 6; i++) {
+      const ram = new THREE.Mesh(ramGeo, matBlack);
+      ram.position.set(-17 + i * 0.7, -1.9, 4 + b * 7);
+      internalGroup.add(ram);
+    }
+  }
+
+  // RAID card
+  const raid = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 8), matPcb);
+  raid.position.set(6, -1.6, 4);
+  internalGroup.add(raid);
+  const raidChip = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 2.2), matHeatsink);
+  raidChip.position.set(6, -1.3, 4);
+  internalGroup.add(raidChip);
+
+  // 8 × 2.5" drives in front
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 4; col++) {
+      const bx = -16.0 + col * 6.0;
+      const by = 1.55 - row * 3.1;
+      const drive = new THREE.Mesh(new THREE.BoxGeometry(7, 1.5, 10), matHdd);
+      drive.position.set(bx, by, 24.5);
+      drive.name = `Vs_Hdd_${row * 4 + col + 1}`;
+      tag(drive, `2.5" 硬盘 ${row * 4 + col + 1}`, 'SAS/SATA 企业级固态/机械硬盘。', 'BoxGeometry', 'Aluminum');
+      hddGroup.add(drive);
+    }
+  }
+  // drive cage
+  for (const cx of [-19.2, 6.8]) {
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.18, 6.6, 12), matHdd);
+    plate.position.set(cx, 0, 24.5);
+    hddGroup.add(plate);
+  }
+
+  // PSU cages at rear
+  for (let i = 0; i < 2; i++) {
+    const px = 12.5 + i * 7.2;
+    const psu = new THREE.Mesh(new THREE.BoxGeometry(6.6, 3.6, 14), matPsu);
+    psu.position.set(px, -1.8, -25);
+    internalGroup.add(psu);
+  }
+
+  markShell(coverGroup);
+  markShell(baseGroup);
+  internalGroup.visible = false;
+  hddGroup.visible = false;
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { baseGroup, coverGroup, frontGroup, rearGroup, internalGroup, hddGroup },
+    onShellToggle: (on) => { internalGroup.visible = !on; hddGroup.visible = !on; },
+  };
+  return root;
+}
+
+// security-platform.js — 企业安全管理平台一体机
+// 2U 机架式，前置 10 寸平台状态屏（摄像机/报警/存储/事件），4 个热插拔盘位。
+// 单位：厘米(cm)。外形 44 × 8.8 × 50。front +Z，root 旋转 180°。
+function buildSecurityPlatform(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'SecurityPlatformAppliance';
+
+  const baseGroup = new THREE.Group(); baseGroup.name = 'SpBaseGroup';
+  const coverGroup = new THREE.Group(); coverGroup.name = 'SpCoverGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'SpFrontGroup';
+  const rearGroup = new THREE.Group(); rearGroup.name = 'SpRearGroup';
+  const internalGroup = new THREE.Group(); internalGroup.name = 'SpInternalGroup';
+  const hddGroup = new THREE.Group(); hddGroup.name = 'SpHddGroup';
+  root.add(baseGroup, coverGroup, frontGroup, rearGroup, internalGroup, hddGroup);
+
+  const W = 44, H = 8.8, D = 50;
+  const hw = W / 2, hh = H / 2, hd = D / 2;
+  const wall = 0.16;
+
+  // ---------- materials ----------
+  const matCase = mat(THREE, 'physical', 'SpCaseMetal', { color: 0x1b1f25, metalness: 0.72, roughness: 0.42 });
+  const matCover = mat(THREE, 'physical', 'SpCoverMetal', { color: 0x20252c, metalness: 0.72, roughness: 0.4 });
+  const matEar = mat(THREE, 'physical', 'SpRackEar', { color: 0x16191e, metalness: 0.8, roughness: 0.38 });
+  const matShield = mat(THREE, 'physical', 'SpNickel', { color: 0xc8d0d6, metalness: 0.9, roughness: 0.22 });
+  const matBlack = mat(THREE, 'standard', 'SpBlackPlastic', { color: 0x0e1014, metalness: 0.1, roughness: 0.64 });
+  const matGold = mat(THREE, 'physical', 'SpGold', { color: 0xfbbf24, metalness: 0.95, roughness: 0.14 });
+  const matCopper = mat(THREE, 'physical', 'SpCopper', { color: 0xd97706, metalness: 0.9, roughness: 0.25 });
+  const matHeatsink = mat(THREE, 'physical', 'SpHeatsink', { color: 0x2a2f36, metalness: 0.85, roughness: 0.3 });
+  const matPcb = mat(THREE, 'standard', 'SpPcbGreen', { color: 0x0b3d2a, metalness: 0.15, roughness: 0.6 });
+  const matHdd = mat(THREE, 'physical', 'SpHddCase', { color: 0x2a2e34, metalness: 0.6, roughness: 0.45 });
+  const matPsu = mat(THREE, 'physical', 'SpPsuAlum', { color: 0x94a3b8, metalness: 0.85, roughness: 0.3 });
+
+  // ---------- front silkscreen ----------
+  const PW = W - 0.4, PH = H - 0.4;
+  const CW = 2048, CH = Math.round(CW * PH / PW);
+  const { c: fc, ctx: f } = canvas(CW, CH);
+  const PX = x => (x / PW + 0.5) * CW;
+  const PY = y => (0.5 - y / PH) * CH;
+
+  const g = f.createLinearGradient(0, 0, CW, CH);
+  g.addColorStop(0, '#171b21'); g.addColorStop(0.5, '#20252c'); g.addColorStop(1, '#15191e');
+  f.fillStyle = g; f.fillRect(0, 0, CW, CH);
+  for (let y = 0; y < CH; y += 3) {
+    f.strokeStyle = 'rgba(255,255,255,0.02)'; f.lineWidth = 1;
+    f.beginPath(); f.moveTo(0, y); f.lineTo(CW, y); f.stroke();
+  }
+  // 蓝色平台主题条
+  f.fillStyle = '#0ea5e9'; f.fillRect(PX(-21.6), PY(4.12), PX(21.6) - PX(-21.6), 5);
+  f.fillStyle = '#dc2626'; f.fillRect(PX(-21.6), PY(4.12), PX(-13.0) - PX(-21.6), 5);
+
+  label(f, 'HIKVISION', PX(-21.4), PY(3.66), { px: 18, color: '#f8fafc', mono: false });
+  label(f, 'HikCentral Professional', PX(-15.4), PY(3.66), { px: 11, color: '#38bdf8' });
+  label(f, 'DS-VP1000  ·  企业安全管理平台一体机', PX(-21.4), PY(3.28), { px: 9, color: '#94a3b8' });
+  label(f, '128 CH  ·  4×SATA  ·  RAID 5  ·  DUAL GE', PX(21.4), PY(3.66), { px: 9, color: '#94a3b8', align: 'right' });
+
+  label(f, 'PWR', PX(15.2), PY(2.3), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'SYS', PX(15.2), PY(1.7), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'ALM', PX(15.2), PY(1.1), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'NET', PX(15.2), PY(0.5), { px: 7, color: '#94a3b8', align: 'center' });
+  label(f, 'USB 3.0', PX(18.6), PY(0.1), { px: 7, color: '#0ea5e9', align: 'center' });
+  label(f, 'ASSET: SEC-BLDG-A3-RACK01-PF01  ·  S/N PF20261029003', PX(0), PY(-4.02), { px: 9, color: '#64748b', align: 'center' });
+
+  const frontTex = canvasTexture(THREE, fc);
+  const matFront = mat(THREE, 'standard', 'SpFrontSilk', { map: frontTex, roughness: 0.42, metalness: 0.35 });
+
+  // ---------- chassis ----------
+  const uShape = new THREE.Shape();
+  uShape.moveTo(-hw, hh - 0.12);
+  uShape.lineTo(-hw, -hh + 0.1);
+  uShape.quadraticCurveTo(-hw, -hh, -hw + 0.1, -hh);
+  uShape.lineTo(hw - 0.1, -hh);
+  uShape.quadraticCurveTo(hw, -hh, hw, -hh + 0.1);
+  uShape.lineTo(hw, hh - 0.12);
+  uShape.lineTo(hw - wall, hh - 0.12);
+  uShape.lineTo(hw - wall, -hh + wall);
+  uShape.lineTo(-hw + wall, -hh + wall);
+  uShape.lineTo(-hw + wall, hh - 0.12);
+  uShape.closePath();
+  const uGeo = new THREE.ExtrudeGeometry(uShape, {
+    depth: D - 0.4, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2,
+  });
+  uGeo.translate(0, 0, -(D - 0.4) / 2);
+  const uBody = new THREE.Mesh(uGeo, matCase);
+  uBody.name = 'Sp_UChassis';
+  uBody.castShadow = true; uBody.receiveShadow = true;
+  tag(uBody, '2U U 型下机壳', '1.2mm 镀锌钢板折弯，承载平台主板、硬盘与电源。', 'Shape + ExtrudeGeometry', 'SGCC');
+  baseGroup.add(uBody);
+
+  const coverShape = roundedRectShape(THREE, W - 0.08, D - 0.3, 0.24);
+  const coverGeo = new THREE.ExtrudeGeometry(coverShape, {
+    depth: 0.14, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  coverGeo.rotateX(Math.PI / 2);
+  const cover = new THREE.Mesh(coverGeo, matCover);
+  cover.position.y = hh;
+  cover.name = 'Sp_TopCover';
+  cover.castShadow = true;
+  tag(cover, '可拆卸顶盖', '顶盖带散热窗，可透视查看平台主板与硬盘。', 'Shape + ExtrudeGeometry', 'SGCC');
+  coverGroup.add(cover);
+
+  // top vents
+  const ventGeo = new THREE.BoxGeometry(24, 0.04, 0.3);
+  for (let i = 0; i < 7; i++) {
+    const v = new THREE.Mesh(ventGeo, matBlack);
+    v.position.set(-4, hh + 0.08, -16 + i * 5);
+    coverGroup.add(v);
+  }
+
+  // rack ears
+  for (const side of [-1, 1]) {
+    const sidePlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, H - 0.14, 8), matEar);
+    sidePlate.position.set(side * (hw + 0.13), 0, hd - 4);
+    baseGroup.add(sidePlate);
+    const flange = new THREE.Mesh(new THREE.BoxGeometry(2.0, H - 0.14, 0.26), matEar);
+    flange.position.set(side * (hw - 0.9), 0, hd - 0.13);
+    baseGroup.add(flange);
+    for (const sy of [-2.6, 2.6]) {
+      const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 10), matShield);
+      sc.rotation.x = Math.PI / 2;
+      sc.position.set(side * (hw - 0.9), sy, hd + 0.02);
+      baseGroup.add(sc);
+    }
+  }
+
+  // ---------- front bezel ----------
+  const frontZ = hd;
+  const bezelShape = roundedRectShape(THREE, W + 0.04, H + 0.02, 0.2);
+  const bezelGeo = new THREE.ExtrudeGeometry(bezelShape, {
+    depth: 0.36, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3,
+  });
+  bezelGeo.translate(0, 0, -0.18);
+  const bezel = new THREE.Mesh(bezelGeo, matCase);
+  bezel.position.z = frontZ;
+  bezel.castShadow = true;
+  frontGroup.add(bezel);
+
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), matFront);
+  face.position.set(0, 0, frontZ + 0.26);
+  face.name = 'Sp_FrontPanel';
+  tag(face, '前面板丝印', '品牌、平台名称、型号、状态灯与资产编号。', 'PlaneGeometry + CanvasTexture', 'Silkscreen');
+  frontGroup.add(face);
+
+  // 10" dashboard LCD
+  const { c: dc, ctx: d } = canvas(1280, 720);
+  d.fillStyle = '#070b12'; d.fillRect(0, 0, 1280, 720);
+  // top bar
+  d.fillStyle = '#0b1626'; d.fillRect(0, 0, 1280, 64);
+  d.fillStyle = '#0ea5e9'; d.fillRect(0, 60, 1280, 4);
+  label(d, 'HikCentral Professional', 24, 34, { px: 26, color: '#e2e8f0', mono: false });
+  label(d, '企业安全管理平台', 470, 34, { px: 16, color: '#38bdf8' });
+  label(d, '2026-10-29  14:32', 1080, 34, { px: 16, color: '#94a3b8', align: 'right' });
+  // KPI cards
+  const cards = [
+    { x: 24, title: 'CAMERAS', value: '128', sub: '在线 126 / 离线 2', color: '#22c55e' },
+    { x: 336, title: 'ALARMS', value: '03', sub: '今日新增 12', color: '#f59e0b' },
+    { x: 648, title: 'STORAGE', value: '68%', sub: '4×4TB RAID5', color: '#38bdf8' },
+    { x: 960, title: 'PLATFORM', value: 'OK', sub: 'CPU 42% / MEM 61%', color: '#a78bfa' },
+  ];
+  cards.forEach(c => {
+    d.fillStyle = '#0d1826'; d.fillRect(c.x, 92, 288, 150);
+    d.strokeStyle = 'rgba(56,189,248,0.35)'; d.lineWidth = 2; d.strokeRect(c.x, 92, 288, 150);
+    label(d, c.title, c.x + 18, 120, { px: 15, color: '#64748b' });
+    label(d, c.value, c.x + 18, 178, { px: 52, color: c.color });
+    label(d, c.sub, c.x + 18, 216, { px: 14, color: '#94a3b8' });
+  });
+  // left event list
+  d.fillStyle = '#0b1420'; d.fillRect(24, 268, 700, 400);
+  d.strokeStyle = 'rgba(56,189,248,0.25)'; d.strokeRect(24, 268, 700, 400);
+  label(d, 'REAL-TIME EVENTS', 44, 296, { px: 15, color: '#38bdf8' });
+  const events = [
+    ['14:31:58', '周界东侧 · 区域入侵', '#ef4444'],
+    ['14:30:12', '大门入口 · 人脸识别通过', '#22c55e'],
+    ['14:28:40', '危化品库 · 门磁打开', '#f59e0b'],
+    ['14:25:03', '实验室走廊 · 视频丢失', '#ef4444'],
+    ['14:20:31', '平台 · 用户 admin 登录', '#38bdf8'],
+  ];
+  events.forEach((e, i) => {
+    const y = 336 + i * 58;
+    d.fillStyle = e[2];
+    d.beginPath(); d.arc(52, y, 6, 0, Math.PI * 2); d.fill();
+    label(d, e[0], 72, y + 1, { px: 15, color: '#94a3b8' });
+    label(d, e[1], 180, y + 1, { px: 16, color: '#e2e8f0' });
+  });
+  // right map
+  d.fillStyle = '#0b1420'; d.fillRect(752, 268, 504, 400);
+  d.strokeStyle = 'rgba(56,189,248,0.25)'; d.strokeRect(752, 268, 504, 400);
+  label(d, 'SITE MAP', 772, 296, { px: 15, color: '#38bdf8' });
+  d.strokeStyle = 'rgba(56,189,248,0.18)'; d.lineWidth = 1;
+  for (let x = 780; x < 1240; x += 40) { d.beginPath(); d.moveTo(x, 320); d.lineTo(x, 650); d.stroke(); }
+  for (let y = 320; y < 650; y += 40) { d.beginPath(); d.moveTo(780, y); d.lineTo(1240, y); d.stroke(); }
+  d.strokeStyle = '#38bdf8'; d.lineWidth = 3; d.strokeRect(860, 380, 200, 140);
+  d.strokeStyle = '#22c55e'; d.strokeRect(1080, 430, 110, 90);
+  d.fillStyle = '#ef4444'; d.beginPath(); d.arc(900, 420, 8, 0, Math.PI * 2); d.fill();
+  d.fillStyle = '#22c55e'; d.beginPath(); d.arc(1130, 470, 8, 0, Math.PI * 2); d.fill();
+  const dashTex = canvasTexture(THREE, dc);
+
+  const lcdHousing = new THREE.Mesh(new THREE.BoxGeometry(11.4, 6.6, 0.6), matBlack);
+  lcdHousing.position.set(-9.8, -0.35, frontZ + 0.2);
+  const lcdScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(10.6, 5.96),
+    new THREE.MeshBasicMaterial({ name: 'SpDashboardMat', map: dashTex })
+  );
+  lcdScreen.position.set(-9.8, -0.35, frontZ + 0.52);
+  const lcdGlass = new THREE.Mesh(
+    new THREE.PlaneGeometry(10.8, 6.16),
+    new THREE.MeshPhysicalMaterial({
+      name: 'SpLcdGlass', color: 0xffffff, transparent: true, opacity: 0.06,
+      roughness: 0.1, clearcoat: 0.5,
+    })
+  );
+  lcdGlass.position.set(-9.8, -0.35, frontZ + 0.54);
+  tag(lcdScreen, '10 寸平台状态屏', '实时显示摄像机在线数、报警、存储、平台负载与事件列表。', 'PlaneGeometry + CanvasTexture', 'IPS LCD');
+  frontGroup.add(lcdHousing, lcdScreen, lcdGlass);
+
+  // 4 drive bays 2×2
+  const bayW = 5.4, bayH = 2.5;
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 2; col++) {
+      const n = row * 2 + col + 1;
+      const bx = 3.0 + col * 6.2;
+      const by = 1.5 - row * 3.0;
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(bayW, bayH, 0.9), matShield);
+      frame.position.set(bx, by, frontZ + 0.22);
+      const door = new THREE.Mesh(new THREE.BoxGeometry(bayW - 0.35, bayH - 0.35, 0.35), matBlack);
+      door.position.set(bx, by, frontZ + 0.72);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.35, 0.4), matShield);
+      handle.position.set(bx + bayW / 2 - 0.6, by, frontZ + 0.92);
+      const led = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+        new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.0, roughness: 0.2 })
+      );
+      led.rotation.x = Math.PI / 2;
+      led.position.set(bx - bayW / 2 + 0.45, by + bayH / 2 - 0.35, frontZ + 0.92);
+      tag(door, `平台盘位 ${n}`, '4TB 企业级 SATA 硬盘热插拔托架，RAID 5 成员。', 'BoxGeometry', 'Aluminum Tray');
+      frontGroup.add(frame, door, handle, led);
+    }
+  }
+
+  // right side status LEDs / power / USB
+  const pwrBtn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.55, 0.2, 20),
+    new THREE.MeshStandardMaterial({ color: 0x1a1d22, emissive: 0x0b3d1f, emissiveIntensity: 0.5, roughness: 0.35 })
+  );
+  pwrBtn.rotation.x = Math.PI / 2;
+  pwrBtn.position.set(17.2, -1.7, frontZ + 0.35);
+  const pwrLed = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+    new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 1.2, roughness: 0.2 })
+  );
+  pwrLed.rotation.x = Math.PI / 2;
+  pwrLed.position.set(17.2, -1.7, frontZ + 0.48);
+  frontGroup.add(pwrBtn, pwrLed);
+
+  const ledCols = [0x22c55e, 0x3b82f6, 0xef4444, 0x06b6d4];
+  ledCols.forEach((c, i) => {
+    const led = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.1, 0.08, 10),
+      new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.9, roughness: 0.2 })
+    );
+    led.rotation.x = Math.PI / 2;
+    led.position.set(15.2, 2.3 - i * 0.6, frontZ + 0.32);
+    frontGroup.add(led);
+  });
+
+  for (let i = 0; i < 2; i++) {
+    const usb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 0.5), matShield);
+    usb.position.set(18.6 + i * 1.25, 0.1, frontZ + 0.3);
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.25, 0.55), matBlack);
+    inner.position.set(18.6 + i * 1.25, 0.1, frontZ + 0.42);
+    frontGroup.add(usb, inner);
+  }
+
+  // ---------- rear panel ----------
+  const rearZ = -hd;
+  const rearPlate = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, H - 0.2, 0.22), matCase);
+  rearPlate.position.set(0, 0, rearZ + 0.11);
+  rearGroup.add(rearPlate);
+
+  // 4 GE RJ45
+  for (let i = 0; i < 4; i++) {
+    const rx = -17 + i * 2.4;
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.5), matShield);
+    cage.position.set(rx, 0.8, rearZ - 0.35);
+    const cav = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.68, 1.55), matBlack);
+    cav.position.set(rx, 0.8, rearZ - 0.3);
+    rearGroup.add(cage, cav);
+    for (let p = 0; p < 8; p++) {
+      const pin = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.18, 0.45), matGold);
+      pin.position.set(rx - 0.35 + p * 0.1, 1.02, rearZ - 0.1);
+      rearGroup.add(pin);
+    }
+  }
+  // HDMI + VGA
+  const hdmi = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.0, 0.8), matShield);
+  hdmi.position.set(-4.0, 0.8, rearZ - 0.2);
+  const vga = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 0.8), matShield);
+  vga.position.set(-0.5, 0.8, rearZ - 0.2);
+  rearGroup.add(hdmi, vga);
+  // USB
+  for (let i = 0; i < 2; i++) {
+    const usb = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 0.7), matShield);
+    usb.position.set(2.8 + i * 1.6, 0.8, rearZ - 0.15);
+    rearGroup.add(usb);
+  }
+  // alarm block
+  const alarm = new THREE.Mesh(new THREE.BoxGeometry(5.0, 1.6, 0.9), matBlack);
+  alarm.position.set(9.5, 0.8, rearZ - 0.1);
+  rearGroup.add(alarm);
+  for (let t = 0; t < 8; t++) {
+    const term = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.35), matCopper);
+    term.position.set(7.5 + t * 0.55, 0.8, rearZ - 0.4);
+    rearGroup.add(term);
+  }
+
+  // redundant PSUs
+  for (let i = 0; i < 2; i++) {
+    const px = 13.0 + i * 7.0;
+    const psu = new THREE.Mesh(new THREE.BoxGeometry(6.4, 3.4, 12), matPsu);
+    psu.position.set(px, -1.8, rearZ + 6.2);
+    tag(psu, `冗余电源 ${i + 1}`, '550W 80+ Platinum 热插拔冗余电源。', 'BoxGeometry', 'Aluminum');
+    rearGroup.add(psu);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.45, 0.45), matBlack);
+    handle.position.set(px, -0.5, rearZ - 0.2);
+    rearGroup.add(handle);
+  }
+
+  // rear fans
+  for (let i = 0; i < 2; i++) {
+    const fx = -12 + i * 5.0;
+    const fan = new THREE.Group();
+    fan.position.set(fx, -2.4, rearZ + 0.2);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.6, 1.0), matBlack);
+    frame.position.z = 0.3;
+    fan.add(frame);
+    const tunnel = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 1.1, 20), new THREE.MeshBasicMaterial({ color: 0x06080c }));
+    tunnel.rotation.x = Math.PI / 2;
+    fan.add(tunnel);
+    const rotor = new THREE.Group();
+    rotor.position.z = 0.1;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.5, 14), matBlack);
+    hub.rotation.x = Math.PI / 2;
+    rotor.add(hub);
+    const bg = new THREE.BoxGeometry(0.9, 0.32, 0.05);
+    for (let b = 0; b < 7; b++) {
+      const bp = new THREE.Group();
+      bp.rotation.z = (b / 7) * Math.PI * 2;
+      const bm = new THREE.Mesh(bg, matBlack);
+      bm.position.x = 0.95; bm.rotation.x = 0.5;
+      bp.add(bm); rotor.add(bp);
+    }
+    fan.add(rotor);
+    rearGroup.add(fan);
+  }
+
+  // ---------- internals ----------
+  const mainPcb = new THREE.Mesh(new THREE.BoxGeometry(34, 0.25, 30), matPcb);
+  mainPcb.position.set(-3, -2.8, -4);
+  mainPcb.name = 'Sp_Mainboard';
+  tag(mainPcb, '平台服务器主板', '承载 Xeon CPU、DDR4、RAID 卡与双千兆网卡。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(mainPcb);
+
+  const base = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 8), matHeatsink);
+  base.position.set(-8, -2.2, -4);
+  internalGroup.add(base);
+  const finGeo = new THREE.BoxGeometry(0.14, 2.4, 8);
+  for (let i = 0; i < 13; i++) {
+    const fin = new THREE.Mesh(finGeo, matHeatsink);
+    fin.position.set(-11.8 + i * 0.62, -0.9, -4);
+    internalGroup.add(fin);
+  }
+
+  const ramGeo = new THREE.BoxGeometry(0.25, 1.4, 6);
+  for (let i = 0; i < 8; i++) {
+    const ram = new THREE.Mesh(ramGeo, matBlack);
+    ram.position.set(-16 + i * 0.7, -1.9, 2);
+    internalGroup.add(ram);
+  }
+
+  // 4 drives in front
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 2; col++) {
+      const bx = 3.0 + col * 6.2;
+      const by = 1.5 - row * 3.0;
+      const drive = new THREE.Mesh(new THREE.BoxGeometry(7.4, 1.5, 10), matHdd);
+      drive.position.set(bx, by, 18);
+      drive.name = `Sp_Hdd_${row * 2 + col + 1}`;
+      hddGroup.add(drive);
+    }
+  }
+  // cage
+  for (const cx of [-0.8, 12.0]) {
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.18, 6.5, 12), matHdd);
+    plate.position.set(cx, 0, 18);
+    hddGroup.add(plate);
+  }
+
+  // PSU cages at rear
+  for (let i = 0; i < 2; i++) {
+    const px = 13.0 + i * 7.0;
+    const psu = new THREE.Mesh(new THREE.BoxGeometry(6.4, 3.4, 12), matPsu);
+    psu.position.set(px, -1.8, -19);
+    internalGroup.add(psu);
+  }
+
+  markShell(coverGroup);
+  markShell(baseGroup);
+  internalGroup.visible = false;
+  hddGroup.visible = false;
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { baseGroup, coverGroup, frontGroup, rearGroup, internalGroup, hddGroup },
+    onShellToggle: (on) => { internalGroup.visible = !on; hddGroup.visible = !on; },
+  };
+  return root;
+}
+
+// ip-intercom.js — IP 网络可视对讲终端（门口机）
+// 壁挂式 20×30cm 面板：7 寸屏、摄像头、扬声器、呼叫按键、RFID 刷卡区。
+// 单位：厘米(cm)。front +Z，root 旋转 180°。
+function buildIPIntercom(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'IPVideoIntercom';
+
+  const shellGroup = new THREE.Group(); shellGroup.name = 'IcShellGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'IcFrontGroup';
+  const internalGroup = new THREE.Group(); internalGroup.name = 'IcInternalGroup';
+  root.add(shellGroup, frontGroup, internalGroup);
+
+  const W = 20, H = 30, D = 3.5;
+  const hw = W / 2, hh = H / 2;
+
+  // ---------- materials ----------
+  const matBody = mat(THREE, 'physical', 'IcBodyAluminum', {
+    color: 0x2a2f36, metalness: 0.65, roughness: 0.35, clearcoat: 0.2,
+  });
+  const matGlass = mat(THREE, 'physical', 'IcFrontGlass', {
+    color: 0x0b0f14, metalness: 0.2, roughness: 0.08, clearcoat: 1.0,
+  });
+  const matBlack = mat(THREE, 'standard', 'IcBlackPlastic', {
+    color: 0x0a0c0f, metalness: 0.1, roughness: 0.7,
+  });
+  const matShield = mat(THREE, 'physical', 'IcNickel', {
+    color: 0xc8d0d6, metalness: 0.9, roughness: 0.22,
+  });
+  const matGreen = mat(THREE, 'physical', 'IcCallGreen', {
+    color: 0x16a34a, metalness: 0.2, roughness: 0.35, clearcoat: 0.5,
+    emissive: 0x052e16, emissiveIntensity: 0.6,
+  });
+  const matLens = mat(THREE, 'physical', 'IcCameraLens', {
+    color: 0x06111c, metalness: 0.4, roughness: 0.03, clearcoat: 1.0,
+  });
+  const matPcb = mat(THREE, 'standard', 'IcPcbGreen', {
+    color: 0x0b3d2a, metalness: 0.15, roughness: 0.6,
+  });
+  const matGold = mat(THREE, 'physical', 'IcGold', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+  const matSpeaker = mat(THREE, 'standard', 'IcSpeaker', {
+    color: 0x1b1e22, roughness: 0.85,
+  });
+
+  // ---------- front screen texture ----------
+  const { c: sc, ctx: s } = canvas(640, 360);
+  s.fillStyle = '#07101a'; s.fillRect(0, 0, 640, 360);
+  const grad = s.createLinearGradient(0, 0, 640, 360);
+  grad.addColorStop(0, '#102033'); grad.addColorStop(1, '#050a10');
+  s.fillStyle = grad; s.fillRect(0, 0, 640, 360);
+  s.strokeStyle = 'rgba(56,189,248,0.5)'; s.lineWidth = 3;
+  s.strokeRect(8, 8, 624, 344);
+  label(s, '访客呼叫  VISITOR CALL', 26, 38, { px: 20, color: '#38bdf8' });
+  label(s, '2026-10-29  14:32', 612, 38, { px: 14, color: '#94a3b8', align: 'right' });
+  // video preview area
+  s.fillStyle = '#0a141e'; s.fillRect(24, 60, 380, 240);
+  s.strokeStyle = 'rgba(56,189,248,0.3)'; s.lineWidth = 1; s.strokeRect(24, 60, 380, 240);
+  // simple visitor silhouette
+  s.fillStyle = '#1e293b';
+  s.beginPath(); s.arc(214, 140, 42, 0, Math.PI * 2); s.fill();
+  s.beginPath();
+  s.moveTo(130, 300); s.quadraticCurveTo(150, 200, 214, 200);
+  s.quadraticCurveTo(278, 200, 298, 300); s.closePath(); s.fill();
+  s.fillStyle = '#334155';
+  s.beginPath(); s.arc(214, 130, 30, 0, Math.PI * 2); s.fill();
+  label(s, '● LIVE', 36, 82, { px: 14, color: '#ef4444' });
+  label(s, '主入口 · 门口机', 36, 286, { px: 13, color: '#94a3b8' });
+  // call targets
+  const targets = [['物业中心', '#22c55e'], ['保安室', '#3b82f6'], ['监控中心', '#f59e0b']];
+  targets.forEach((t, i) => {
+    const y = 64 + i * 76;
+    s.fillStyle = '#0d1826'; s.fillRect(424, y, 190, 62);
+    s.strokeStyle = t[1]; s.lineWidth = 2; s.strokeRect(424, y, 190, 62);
+    label(s, t[0], 444, y + 38, { px: 18, color: '#e2e8f0' });
+  });
+  label(s, '请按绿色呼叫键', 424, 314, { px: 14, color: '#94a3b8' });
+  const screenTex = canvasTexture(THREE, sc);
+
+  // ---------- wall plate + body ----------
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(W - 0.4, H - 0.4, 0.6), matShield);
+  plate.position.z = -D / 2 + 0.3;
+  plate.name = 'Ic_WallPlate';
+  tag(plate, '壁挂底板', '镀锌钢壁挂底板，四角 M6 防盗螺钉固定。', 'BoxGeometry', 'Steel');
+  shellGroup.add(plate);
+
+  const bodyShape = roundedRectShape(THREE, W, H, 1.0);
+  const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, {
+    depth: D - 0.8, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 3,
+  });
+  bodyGeo.translate(0, 0, -(D - 0.8) / 2);
+  const body = new THREE.Mesh(bodyGeo, matBody);
+  body.position.z = 0;
+  body.castShadow = true; body.receiveShadow = true;
+  body.name = 'Ic_Body';
+  tag(body, '铝合金机身', '20×30cm 压铸铝机身，深灰阳极氧化，IP65 防水。', 'ExtrudeGeometry', 'Die-cast Aluminum');
+  shellGroup.add(body);
+
+  // front glass
+  const glassShape = roundedRectShape(THREE, W - 1.2, H - 1.2, 0.8);
+  const glassGeo = new THREE.ExtrudeGeometry(glassShape, {
+    depth: 0.25, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 2,
+  });
+  const frontGlass = new THREE.Mesh(glassGeo, matGlass);
+  frontGlass.position.z = D / 2 - 0.5;
+  frontGlass.name = 'Ic_FrontGlass';
+  tag(frontGlass, '前面板玻璃', '黑色钢化玻璃面板，集成屏幕、摄像头与刷卡区。', 'ExtrudeGeometry', 'Tempered Glass');
+  shellGroup.add(frontGlass);
+
+  // 4 tamper screws
+  const screwGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.18, 12);
+  screwGeo.rotateX(Math.PI / 2);
+  for (const sx of [-8.4, 8.4]) {
+    for (const sy of [-13.4, 13.4]) {
+      const sc = new THREE.Mesh(screwGeo, matShield);
+      sc.position.set(sx, sy, D / 2 - 0.35);
+      shellGroup.add(sc);
+    }
+  }
+
+  // ---------- screen ----------
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(13.6, 7.65),
+    new THREE.MeshBasicMaterial({ name: 'IcScreenMat', map: screenTex })
+  );
+  screen.position.set(0, 6.2, D / 2 - 0.22);
+  screen.name = 'Ic_Screen';
+  tag(screen, '7 寸触摸屏', '显示访客视频、呼叫目标与物业信息。', 'PlaneGeometry + CanvasTexture', 'IPS Touch LCD');
+  frontGroup.add(screen);
+  const screenBezel = new THREE.Mesh(new THREE.BoxGeometry(14.4, 8.45, 0.3), matBlack);
+  screenBezel.position.set(0, 6.2, D / 2 - 0.4);
+  frontGroup.add(screenBezel);
+
+  // ---------- camera ----------
+  const camHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.5, 20), matShield);
+  camHousing.rotation.x = Math.PI / 2;
+  camHousing.position.set(0, 12.6, D / 2 - 0.25);
+  const camLens = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.2, 20), matLens);
+  camLens.rotation.x = Math.PI / 2;
+  camLens.position.set(0, 12.6, D / 2 - 0.05);
+  frontGroup.add(camHousing, camLens);
+  // IR LEDs
+  for (const dx of [-1.4, 1.4]) {
+    const ir = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.14, 0.1, 10),
+      new THREE.MeshStandardMaterial({ color: 0x3a0a0a, emissive: 0x7f1d1d, emissiveIntensity: 0.5, roughness: 0.25 })
+    );
+    ir.rotation.x = Math.PI / 2;
+    ir.position.set(dx, 12.6, D / 2 - 0.06);
+    frontGroup.add(ir);
+  }
+
+  // ---------- speaker grille ----------
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(11, 3.2, 0.25), matBlack);
+  grille.position.set(0, 0.6, D / 2 - 0.35);
+  frontGroup.add(grille);
+  const holeGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.22, 8);
+  holeGeo.rotateX(Math.PI / 2);
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 14; c++) {
+      const hole = new THREE.Mesh(holeGeo, matShield);
+      hole.position.set(-5 + c * 0.77, -0.6 + r * 0.8, D / 2 - 0.2);
+      frontGroup.add(hole);
+    }
+  }
+
+  // ---------- call button ----------
+  const callRing = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.18, 12, 36), matShield);
+  callRing.position.set(0, -5.8, D / 2 - 0.28);
+  const callBtn = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 0.35, 36), matGreen);
+  callBtn.rotation.x = Math.PI / 2;
+  callBtn.position.set(0, -5.8, D / 2 - 0.18);
+  callBtn.name = 'Ic_CallButton';
+  tag(callBtn, '绿色呼叫按键', '一键呼叫物业/保安/监控中心，带背光与盲文标识。', 'CylinderGeometry', 'PC + LED');
+  frontGroup.add(callRing, callBtn);
+
+  // ---------- RFID area + logo ----------
+  const rfid = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), matBlack);
+  rfid.position.set(0, -10.6, D / 2 - 0.22);
+  frontGroup.add(rfid);
+
+  const { c: lc, ctx: lctx } = canvas(512, 128);
+  lctx.fillStyle = '#0b0f14'; lctx.fillRect(0, 0, 512, 128);
+  label(lctx, 'HIKVISION', 24, 52, { px: 40, color: '#e5e7eb', mono: false });
+  label(lctx, 'IP VIDEO INTERCOM  ·  DS-KD8003', 24, 92, { px: 14, color: '#6b7280' });
+  const logoTex = canvasTexture(THREE, lc);
+  const logo = new THREE.Mesh(
+    new THREE.PlaneGeometry(9, 2.25),
+    new THREE.MeshBasicMaterial({ map: logoTex, transparent: false })
+  );
+  logo.position.set(0, -13.0, D / 2 - 0.22);
+  frontGroup.add(logo);
+
+  // mic hole
+  const mic = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 8), matBlack);
+  mic.rotation.x = Math.PI / 2;
+  mic.position.set(0, -14.3, D / 2 - 0.2);
+  frontGroup.add(mic);
+
+  // ---------- internal modules ----------
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(14, 0.25, 20), matPcb);
+  pcb.position.set(0, 0, -0.5);
+  pcb.name = 'Ic_MainPcb';
+  tag(pcb, '主控板', '集成网络解码、音频功放、继电器与 PoE 受电。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(pcb);
+
+  const speaker = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 1.2, 28), matSpeaker);
+  speaker.rotation.x = Math.PI / 2;
+  speaker.position.set(0, 0.6, -1.4);
+  tag(speaker, '8Ω 3W 扬声器', '免提对讲扬声器。', 'CylinderGeometry', 'Mylar');
+  internalGroup.add(speaker);
+
+  const cameraMod = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.0, 2.0), matBlack);
+  cameraMod.position.set(0, 12.6, 0.2);
+  internalGroup.add(cameraMod);
+  const camPcb = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 2.4), matPcb);
+  camPcb.position.set(0, 12.6, 1.2);
+  internalGroup.add(camPcb);
+
+  const micMod = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 10), matBlack);
+  micMod.rotation.x = Math.PI / 2;
+  micMod.position.set(0, -14.3, 0.6);
+  internalGroup.add(micMod);
+
+  // rear terminals
+  const poe = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.2), matShield);
+  poe.position.set(-6, -11, -1.7);
+  const relay = new THREE.Mesh(new THREE.BoxGeometry(5.0, 1.1, 0.9), matBlack);
+  relay.position.set(0, -11, -1.7);
+  for (let t = 0; t < 6; t++) {
+    const term = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.35), matGold);
+    term.position.set(-2 + t * 0.55, -11, -2.1);
+    internalGroup.add(term);
+  }
+  internalGroup.add(poe, relay);
+
+  markShell(shellGroup);
+  internalGroup.visible = false;
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { shellGroup, frontGroup, internalGroup },
+    onShellToggle: (on) => { internalGroup.visible = !on; },
+  };
+  return root;
+}
+
+// paging-microphone.js — 网络寻呼话筒（桌面式 IP 广播控制台）
+// 桌面底座 + 3.5 寸屏 + 数字键盘 + 分区键 + PTT + 鹅颈麦克风。
+// 单位：厘米(cm)。底座 24×18×5，鹅颈高约 22。front +Z，root 旋转 180°。
+function buildPagingMicrophone(THREE) {
+  const { roundedRectShape, canvasTexture, canvas, label, tag, mat, markShell } = MK;
+
+  const root = new THREE.Group();
+  root.name = 'NetworkPagingMicrophone';
+
+  const shellGroup = new THREE.Group(); shellGroup.name = 'PmShellGroup';
+  const frontGroup = new THREE.Group(); frontGroup.name = 'PmFrontGroup';
+  const topGroup = new THREE.Group(); topGroup.name = 'PmTopGroup';
+  const micGroup = new THREE.Group(); micGroup.name = 'PmMicGroup';
+  const internalGroup = new THREE.Group(); internalGroup.name = 'PmInternalGroup';
+  root.add(shellGroup, frontGroup, topGroup, micGroup, internalGroup);
+
+  const W = 24, D = 18, H = 5;
+  const hw = W / 2, hd = D / 2, hh = H / 2;
+
+  // ---------- materials ----------
+  const matBase = mat(THREE, 'physical', 'PmBaseDark', {
+    color: 0x22262c, metalness: 0.35, roughness: 0.45, clearcoat: 0.2,
+  });
+  const matTop = mat(THREE, 'physical', 'PmTopPanel', {
+    color: 0x2b3037, metalness: 0.4, roughness: 0.4, clearcoat: 0.25,
+  });
+  const matBlack = mat(THREE, 'standard', 'PmBlackPlastic', {
+    color: 0x0b0d10, metalness: 0.1, roughness: 0.68,
+  });
+  const matShield = mat(THREE, 'physical', 'PmNickel', {
+    color: 0xc8d0d6, metalness: 0.9, roughness: 0.22,
+  });
+  const matKey = mat(THREE, 'standard', 'PmKeyGray', {
+    color: 0xb9c0c6, metalness: 0.1, roughness: 0.55,
+  });
+  const matPtt = mat(THREE, 'physical', 'PmPttGreen', {
+    color: 0x16a34a, metalness: 0.2, roughness: 0.35, clearcoat: 0.5,
+    emissive: 0x052e16, emissiveIntensity: 0.5,
+  });
+  const matGoose = mat(THREE, 'physical', 'PmGooseneckMetal', {
+    color: 0x4b5158, metalness: 0.85, roughness: 0.35,
+  });
+  const matMic = mat(THREE, 'standard', 'PmMicBlack', {
+    color: 0x101215, metalness: 0.2, roughness: 0.6,
+  });
+  const matPcb = mat(THREE, 'standard', 'PmPcbGreen', {
+    color: 0x0b3d2a, metalness: 0.15, roughness: 0.6,
+  });
+  const matGold = mat(THREE, 'physical', 'PmGold', {
+    color: 0xfbbf24, metalness: 0.95, roughness: 0.15,
+  });
+  const matSpeaker = mat(THREE, 'standard', 'PmSpeaker', {
+    color: 0x1b1e22, roughness: 0.85,
+  });
+
+  // ---------- screen texture ----------
+  const { c: sc, ctx: s } = canvas(640, 360);
+  s.fillStyle = '#07101a'; s.fillRect(0, 0, 640, 360);
+  const grad = s.createLinearGradient(0, 0, 640, 360);
+  grad.addColorStop(0, '#102033'); grad.addColorStop(1, '#050a10');
+  s.fillStyle = grad; s.fillRect(0, 0, 640, 360);
+  s.strokeStyle = 'rgba(56,189,248,0.5)'; s.lineWidth = 3; s.strokeRect(8, 8, 624, 344);
+  label(s, 'NETWORK PAGING', 26, 38, { px: 22, color: '#38bdf8' });
+  label(s, 'DS-QA6P', 612, 38, { px: 14, color: '#94a3b8', align: 'right' });
+  label(s, '分区广播  ·  全部在线', 26, 78, { px: 16, color: '#e2e8f0' });
+  const zones = [
+    ['01  大门入口', '#22c55e'], ['02  实验楼走廊', '#22c55e'],
+    ['03  危化品库', '#f59e0b'], ['04  周界东侧', '#22c55e'],
+    ['05  停车场', '#94a3b8'], ['06  全员广播', '#38bdf8'],
+  ];
+  zones.forEach((z, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = 26 + col * 300, y = 100 + row * 66;
+    s.fillStyle = '#0d1826'; s.fillRect(x, y, 284, 54);
+    s.strokeStyle = 'rgba(56,189,248,0.3)'; s.lineWidth = 1; s.strokeRect(x, y, 284, 54);
+    s.fillStyle = z[1];
+    s.beginPath(); s.arc(x + 18, y + 27, 6, 0, Math.PI * 2); s.fill();
+    label(s, z[0], x + 34, y + 28, { px: 16, color: '#e2e8f0' });
+  });
+  s.fillStyle = '#0d1826'; s.fillRect(26, 306, 588, 34);
+  label(s, 'PTT: IDLE   ·   VOL 72%   ·   14:32:08', 40, 324, { px: 14, color: '#94a3b8' });
+  const screenTex = canvasTexture(THREE, sc);
+
+  // ---------- base ----------
+  const baseShape = roundedRectShape(THREE, W, D, 1.2);
+  const baseGeo = new THREE.ExtrudeGeometry(baseShape, {
+    depth: H, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 4,
+  });
+  baseGeo.translate(0, 0, -H / 2);
+  baseGeo.rotateX(-Math.PI / 2);   // 厚度方向转为 Y
+  const base = new THREE.Mesh(baseGeo, matBase);
+  base.castShadow = true; base.receiveShadow = true;
+  base.name = 'Pm_Base';
+  tag(base, '桌面控制台底座', '24×18×5cm 压铸铝底座，底部防滑脚垫。', 'ExtrudeGeometry', 'Die-cast Aluminum');
+  shellGroup.add(base);
+
+  // top panel
+  const topShape = roundedRectShape(THREE, W - 1.2, D - 1.2, 0.9);
+  const topGeo = new THREE.ExtrudeGeometry(topShape, {
+    depth: 0.25, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2,
+  });
+  topGeo.translate(0, 0, -0.125);
+  topGeo.rotateX(-Math.PI / 2);
+  const top = new THREE.Mesh(topGeo, matTop);
+  top.position.y = hh;
+  top.name = 'Pm_TopPanel';
+  shellGroup.add(top);
+
+  // rubber feet
+  const footGeo = new THREE.CylinderGeometry(0.7, 0.6, 0.25, 16);
+  for (const fx of [-hw + 3, hw - 3]) {
+    for (const fz of [-hd + 3, hd - 3]) {
+      const foot = new THREE.Mesh(footGeo, matBlack);
+      foot.position.set(fx, -hh - 0.12, fz);
+      shellGroup.add(foot);
+    }
+  }
+
+  // ---------- front LCD + PTT + zone keys ----------
+  const frontZ = hd;
+  const lcdHousing = new THREE.Mesh(new THREE.BoxGeometry(8.2, 4.4, 0.6), matBlack);
+  lcdHousing.position.set(-6.6, 0.3, frontZ + 0.15);
+  const lcdScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(7.6, 4.0),
+    new THREE.MeshBasicMaterial({ name: 'PmScreenMat', map: screenTex })
+  );
+  lcdScreen.position.set(-6.6, 0.3, frontZ + 0.48);
+  const lcdGlass = new THREE.Mesh(
+    new THREE.PlaneGeometry(7.8, 4.2),
+    new THREE.MeshPhysicalMaterial({
+      name: 'PmScreenGlass', color: 0xffffff, transparent: true, opacity: 0.06,
+      roughness: 0.1, clearcoat: 0.5,
+    })
+  );
+  lcdGlass.position.set(-6.6, 0.3, frontZ + 0.5);
+  tag(lcdScreen, '3.5 寸寻呼屏', '显示分区状态、音量与 PTT 状态。', 'PlaneGeometry + CanvasTexture', 'IPS LCD');
+  frontGroup.add(lcdHousing, lcdScreen, lcdGlass);
+
+  // PTT button
+  const pttRing = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.15, 10, 32), matShield);
+  pttRing.position.set(8.0, -0.7, frontZ + 0.3);
+  const ptt = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.4, 32), matPtt);
+  ptt.rotation.x = Math.PI / 2;
+  ptt.position.set(8.0, -0.7, frontZ + 0.45);
+  ptt.name = 'Pm_PttButton';
+  tag(ptt, 'PTT 按下发言键', '按下后向选定分区广播，松开结束。', 'CylinderGeometry', 'PC + LED');
+  frontGroup.add(pttRing, ptt);
+
+  // zone keys (6) above PTT
+  const zoneTex = (n) => {
+    const { c, ctx } = canvas(64, 64);
+    ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, 0, 64, 64);
+    label(ctx, `Z${n}`, 32, 34, { px: 22, color: '#1f2937', align: 'center', mono: false });
+    return canvasTexture(THREE, c);
+  };
+  for (let i = 0; i < 6; i++) {
+    const zx = 1.0 + (i % 3) * 2.1;
+    const zy = 1.7 - Math.floor(i / 3) * 1.5;
+    const key = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.1, 0.35), matKey);
+    key.position.set(zx, zy, frontZ + 0.32);
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 0.85),
+      new THREE.MeshBasicMaterial({ map: zoneTex(i + 1) })
+    );
+    face.position.set(zx, zy, frontZ + 0.51);
+    frontGroup.add(key, face);
+  }
+
+  // ---------- top keypad ----------
+  const keySide = matKey;
+  function keyTexture(txt) {
+    const { c, ctx } = canvas(64, 64);
+    ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, 0, 64, 64);
+    label(ctx, txt, 32, 35, { px: 28, color: '#1f2937', align: 'center', mono: false });
+    return canvasTexture(THREE, c);
+  }
+  const keyLabels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 3; c++) {
+      const idx = r * 3 + c;
+      const kx = -9.0 + c * 1.9;
+      const kz = -2.4 + r * 1.9;
+      const tex = keyTexture(keyLabels[idx]);
+      const topMat = new THREE.MeshBasicMaterial({ map: tex });
+      const mats = [keySide, keySide, topMat, keySide, keySide, keySide];
+      const key = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.45, 1.6), mats);
+      key.position.set(kx, hh + 0.35, kz);
+      topGroup.add(key);
+    }
+  }
+
+  // volume knob
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 0.7, 30), matShield);
+  knob.position.set(7.2, hh + 0.45, -4.2);
+  knob.name = 'Pm_VolumeKnob';
+  const knobMark = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.9), matBlack);
+  knobMark.position.set(7.2, hh + 0.82, -4.2);
+  topGroup.add(knob, knobMark);
+
+  // status LEDs
+  for (let i = 0; i < 4; i++) {
+    const led = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.14, 0.1, 10),
+      new THREE.MeshStandardMaterial({
+        color: [0x22c55e, 0x3b82f6, 0xf59e0b, 0xef4444][i],
+        emissive: [0x22c55e, 0x3b82f6, 0xf59e0b, 0xef4444][i],
+        emissiveIntensity: 0.8, roughness: 0.2,
+      })
+    );
+    led.position.set(7.2, hh + 0.2, 2.0 - i * 1.2);
+    topGroup.add(led);
+  }
+
+  // ---------- gooseneck microphone ----------
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-9.0, hh, -6.0),
+    new THREE.Vector3(-9.0, hh + 6.0, -6.0),
+    new THREE.Vector3(-9.0, hh + 12.0, -3.5),
+    new THREE.Vector3(-8.5, hh + 16.5, 1.0),
+    new THREE.Vector3(-8.0, hh + 18.5, 5.0),
+  ]);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.32, 10, false), matGoose);
+  tube.name = 'Pm_Gooseneck';
+  tag(tube, '鹅颈麦克风软管', '30cm 金属软管，可任意弯折定位。', 'TubeGeometry (Spline)', 'Stainless Steel');
+  micGroup.add(tube);
+
+  // flexible ribs
+  for (let i = 1; i < 22; i++) {
+    const t = i / 22;
+    const p = curve.getPoint(t);
+    const tan = curve.getTangent(t).normalize();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.055, 6, 14), matBlack);
+    ring.position.copy(p);
+    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+    micGroup.add(ring);
+  }
+
+  // mic capsule
+  const end = curve.getPoint(1);
+  const endTan = curve.getTangent(1).normalize();
+  const capsule = new THREE.Group();
+  capsule.position.copy(end);
+  capsule.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), endTan);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.75, 2.6, 24), matMic);
+  head.position.y = 1.2;
+  const grille = new THREE.Mesh(new THREE.SphereGeometry(0.95, 24, 16), matBlack);
+  grille.position.y = 2.5;
+  grille.scale.y = 0.7;
+  const ringCap = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.08, 8, 24), matShield);
+  ringCap.rotation.x = Math.PI / 2;
+  ringCap.position.y = 2.15;
+  capsule.add(head, grille, ringCap);
+  micGroup.add(capsule);
+
+  // base connector
+  const gooseneckBase = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 1.0, 24), matShield);
+  gooseneckBase.position.set(-9.0, hh + 0.4, -6.0);
+  micGroup.add(gooseneckBase);
+
+  // ---------- rear connectors ----------
+  const rearZ = -hd;
+  const poe = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.8), matShield);
+  poe.position.set(-6, -1.0, rearZ + 0.1);
+  const dc = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.4, 16), matBlack);
+  dc.rotation.x = Math.PI / 2;
+  dc.position.set(-3.5, -1.0, rearZ - 0.05);
+  const audio = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.0, 0.6), matBlack);
+  audio.position.set(0, -1.0, rearZ + 0.1);
+  const usb = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.5), matShield);
+  usb.position.set(3.0, -1.0, rearZ + 0.05);
+  internalGroup.add(poe, dc, audio, usb);
+
+  // ---------- internals ----------
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(18, 0.25, 12), matPcb);
+  pcb.position.set(0, -1.2, 0);
+  pcb.name = 'Pm_MainPcb';
+  tag(pcb, '寻呼控制主板', '网络音频解码、分区控制、PTT 与麦克风前置放大。', 'BoxGeometry', 'FR-4');
+  internalGroup.add(pcb);
+
+  const speaker = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 1.0, 24), matSpeaker);
+  speaker.rotation.x = Math.PI / 2;
+  speaker.position.set(6.0, -0.8, 4.0);
+  internalGroup.add(speaker);
+
+  const micPre = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 3), matPcb);
+  micPre.position.set(-8.5, -0.8, -4.5);
+  internalGroup.add(micPre);
+  const ic = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 1.6), matBlack);
+  ic.position.set(-8.5, -0.5, -4.5);
+  internalGroup.add(ic);
+
+  markShell(shellGroup);
+  internalGroup.visible = false;
+
+  root.rotation.y = Math.PI;
+  root.userData = {
+    groups: { shellGroup, frontGroup, topGroup, micGroup, internalGroup },
+    onShellToggle: (on) => { internalGroup.visible = !on; },
+  };
+  return root;
+}
+
 const __addons = (function () {
 const unzlibSync = (function () {
 /*!
@@ -95747,6 +99207,25 @@ function main() {
     { id: 'hikvision-column-speaker', name: '海康威视网络音柱', build: buildHikvisionColumnSpeaker },
     { id: 'poe-security-switch', name: '24口千兆 PoE+ 安防交换机', build: buildPoeSecuritySwitch,
       view: { theta: 2.62, phi: 1.36 } },
+    { id: 'nvr-4bay', name: 'NVR 网络视频录像机 (4盘位)', build: buildNVR,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'dome-camera', name: '海康威视半球网络摄像机', build: buildDomeCamera },
+    { id: 'ptz-camera', name: '7寸红外网络球机 (PTZ)', build: buildPTZCamera,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'poe-switch-8', name: '8口千兆 PoE 交换机', build: buildPoeSwitch8,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'fiber-odf', name: '24口光纤配线架 (ODF)', build: buildFiberODF,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'monitor-4k', name: '27寸 4K 安防监视器', build: buildMonitor4K,
+      view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
+    { id: 'video-server', name: '2U 视频服务器', build: buildVideoServer,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'security-platform', name: '企业安全管理平台一体机', build: buildSecurityPlatform,
+      view: { theta: 2.62, phi: 1.36 } },
+    { id: 'ip-intercom', name: 'IP 网络可视对讲终端', build: buildIPIntercom,
+      view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
+    { id: 'paging-microphone', name: '网络寻呼话筒', build: buildPagingMicrophone,
+      view: { theta: 2.7, phi: 1.42, fitViewport: true, spin: false } },
     // { id: 'xxx', name: 'xxx名称', build: buildXxx },
   ];
 
@@ -95754,7 +99233,7 @@ function main() {
   scene.add(pivot);
   let currentModel = null;
   let currentRec = null;
-  let currentId = MODELS[MODELS.length - 1].id;
+  let currentId = 'nvr-4bay';   // 默认展示系统核心设备 NVR
 
   // 给未命名的网格补名字,导出后在 Blender / Unity 里好认
   function nameModel() {
@@ -95912,7 +99391,7 @@ function main() {
     const b = document.getElementById('btn-spin');
     if (b) b.addEventListener('click', () => { spin = !spin; syncSpinBtn(); });
   }
-  setModel(MODELS[MODELS.length - 1].id);
+  setModel('nvr-4bay');
   syncSpinBtn();   // 初始状态(部分模型自带 view.spin = false)
 
   // ---------- 导出:打包成一个 zip(模型 + 贴图 + 说明),避免浏览器连续弹多个下载 ----------
