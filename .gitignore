@@ -17,3 +17,7 @@ t.js
 
 # Keep model recovery snapshots local; track the current saved models
 assets/imported-models/*/backups/
+
+# Shader recovery copies and temporary Unity verification screenshots
+exports/Unity流动Shader/backup/
+exports/Unity流动Shader/*推进验证.png
