@@ -49,7 +49,11 @@ function extractTriangles(mesh, scale) {
   // 点变换: out_i = e[i]*x + e[4+i]*y + e[8+i]*z + e[12+i]
   // (旧实现把 m[12] 当平移用,但 m[12] 实际取到 e[3]——恒为 0,导致所有
   //  用 position 定位的部件顶点全部堆在原点;旋转同时被转置)
-  const e = mesh.matrixWorld.elements;
+  // Movable parts opt in to keeping their local origin/axes. Most existing
+  // models still bake world coordinates exactly as before.
+  const preservePivot = mesh.userData?.preservePivot === true;
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  const e = preservePivot ? identity : mesh.matrixWorld.elements;
   const e0 = e[0], e1 = e[4], e2 = e[8], tx = e[12];
   const e3 = e[1], e4 = e[5], e5 = e[9], ty = e[13];
   const e6 = e[2], e7 = e[6], e8 = e[10], tz = e[14];
@@ -94,13 +98,30 @@ function extractTriangles(mesh, scale) {
     if (uvAttr) uv.push(uvAttr.getX(vi), uvAttr.getY(vi));
     else uv.push(0, 0);
   }
-  return { pos, nor, uv, triCount: cornerCount / 3 };
+  let transform = null;
+  if (preservePivot) {
+    const p = mesh.position.clone(), q = mesh.quaternion.clone(), s = mesh.scale.clone();
+    mesh.matrixWorld.decompose(p, q, s);
+    // FBX's default extrinsic XYZ order corresponds to Three.js intrinsic ZYX.
+    const rotation = mesh.rotation.clone().setFromQuaternion(q, 'ZYX');
+    const matrix = Array.from(mesh.matrixWorld.elements);
+    matrix[12] *= scale; matrix[13] *= scale; matrix[14] *= scale;
+    transform = { matrix, translation: [p.x * scale, p.y * scale, p.z * scale],
+      rotation: [rotation.x, rotation.y, rotation.z].map(r => r * 180 / Math.PI),
+      scaling: [s.x, s.y, s.z] };
+  }
+  return { pos, nor, uv, triCount: cornerCount / 3, transform };
 }
 
 // canvas 贴图 -> PNG 字节
 function canvasPngBytes(image) {
   if (!image) return null;
   try {
+    // Saved PNGs can be exported losslessly, including in offline Node tools.
+    if (typeof image.src === 'string' && image.src.startsWith('data:image/png;base64,')) {
+      const bin = atob(image.src.slice('data:image/png;base64,'.length));
+      return Uint8Array.from(bin, c => c.charCodeAt(0));
+    }
     const c = document.createElement('canvas');
     c.width = image.width; c.height = image.height;
     c.getContext('2d').drawImage(image, 0, 0);
@@ -194,9 +215,9 @@ function buildFBXTree(scene, opts = {}) {
     const model = N('Model', [T.L(mid), T.S(name + '\x00\x01' + 'Model'), T.S('Mesh')], [
       N('Version', [T.I(232)]),
       N('Properties70', [], [
-        p70('Lcl Translation', 'Lcl Translation', '', 'A', T.D(0), T.D(0), T.D(0)),
-        p70('Lcl Rotation', 'Lcl Rotation', '', 'A', T.D(0), T.D(0), T.D(0)),
-        p70('Lcl Scaling', 'Lcl Scaling', '', 'A', T.D(1), T.D(1), T.D(1)),
+        p70('Lcl Translation', 'Lcl Translation', '', 'A', ...(t.transform?.translation || [0, 0, 0]).map(T.D)),
+        p70('Lcl Rotation', 'Lcl Rotation', '', 'A', ...(t.transform?.rotation || [0, 0, 0]).map(T.D)),
+        p70('Lcl Scaling', 'Lcl Scaling', '', 'A', ...(t.transform?.scaling || [1, 1, 1]).map(T.D)),
         p70('DefaultAttributeIndex', 'int', 'Integer', '', T.I(0)),
       ]),
       N('Shading', [T.B(true)]),
@@ -515,6 +536,11 @@ function exportGLB(scene, opts = {}) {
 
     const indexArr = new Uint32Array(t.triCount * 3);
     for (let i = 0; i < indexArr.length; i++) indexArr[i] = i;
+    // glTF images use top-left UV origin; Three.js PNG textures normally flip Y.
+    const baseMap = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material)?.map;
+    if (baseMap && baseMap.flipY !== false) {
+      for (let i = 1; i < t.uv.length; i += 2) t.uv[i] = 1 - t.uv[i];
+    }
     const idxView = pushBin(new Uint8Array(indexArr.buffer));
     bufferViews.push({ buffer: 0, byteOffset: idxView.offset, byteLength: idxView.length, target: 34963 });
 
@@ -583,7 +609,8 @@ function exportGLB(scene, opts = {}) {
         material: matIdx,
       }],
     });
-    nodesJson.push({ name, mesh: meshesJson.length - 1 });
+    nodesJson.push({ name, mesh: meshesJson.length - 1,
+      ...(t.transform ? { matrix: t.transform.matrix } : {}) });
   }
 
   const gltf = {
@@ -605,9 +632,12 @@ function exportGLB(scene, opts = {}) {
   let off = 0;
   for (const p of binParts) { bin.set(p, off); off += p.byteLength; off = (off + 3) & ~3; }
 
-  let jsonStr = JSON.stringify(gltf);
-  while (jsonStr.length % 4 !== 0) jsonStr += ' ';
-  const jsonBytes = new TextEncoder().encode(jsonStr);
+  // GLB chunks align by UTF-8 byte count, not JavaScript character count.
+  // Chinese node/material names may take three bytes per character.
+  const encodedJson = new TextEncoder().encode(JSON.stringify(gltf));
+  const jsonBytes = new Uint8Array(pad4(encodedJson.length));
+  jsonBytes.fill(0x20);
+  jsonBytes.set(encodedJson);
 
   const total = 12 + 8 + jsonBytes.length + 8 + bin.length;
   const out = new ArrayBuffer(total);

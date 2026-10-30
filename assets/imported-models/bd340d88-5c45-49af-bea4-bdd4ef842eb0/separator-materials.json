@@ -1,0 +1,14 @@
+{
+  "modelId": "bd340d88-5c45-49af-bea4-bdd4ef842eb0",
+  "description": "卧式分离器：罐体与楼梯金属、工艺管线黄色、底部排污支路红色、阀门深灰铸钢。",
+  "compositeShell": "L1_GLQFLQ_01_M1_13_0",
+  "ladderNodes": ["L1_GLQFLQ_01_M2_13"],
+  "yellowPipeNodes": ["L1_GLQFLQ_01_13_01"],
+  "materials": {
+    "vessel": {"name":"分离罐金属","color":"#b2bbc3","metalness":0.88,"roughness":0.33},
+    "ladder": {"name":"楼梯平台金属","color":"#a4afb8","metalness":0.82,"roughness":0.42},
+    "valve": {"name":"阀门铸钢","color":"#46515c","metalness":0.68,"roughness":0.48},
+    "yellow": {"name":"工艺管道黄漆","color":"#edb71a","metalness":0.08,"roughness":0.42},
+    "drain": {"name":"排污管道红漆","color":"#bd2a24","metalness":0.08,"roughness":0.44}
+  }
+}

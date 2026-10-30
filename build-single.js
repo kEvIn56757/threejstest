@@ -6,16 +6,16 @@ const mod = fs.readFileSync('vendor/three.module.js', 'utf8');
 const zipLib = fs.readFileSync('zip.js', 'utf8');
 const exporter = fs.readFileSync('fbx-exporter.js', 'utf8');
 // 全部程序化模型(新增模型只需在这里和 index.html 各加一行)
-const modelSources = [
+const modelFiles = [
   'model-kit.js',
   'ronk-ups.js',
+  'clamp-meter.js',
   'earth-tester.js',
   'multimeter.js',
   'multimeter-2.js',
   'air-detector.js',
   'kindergarten-frame.js',
   'hikvision-column-speaker.js',
-  'clamp-meter.js',
   'thermal-imager.js',
   'rugged-phone.js',
   'poe-security-switch.js',
@@ -32,7 +32,8 @@ const modelSources = [
   'positioner-signal-source.js',
   'positioner-test-connectors.js',
   'leak-detector-sprayer.js',
-].map(file => fs.readFileSync(file, 'utf8')).join('\n');
+];
+const modelSources = modelFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const importerSrc = fs.readFileSync('importer.js', 'utf8');
 // 导入功能依赖 three 的 addons(FBXLoader 及其 NURBS/fflate 依赖),先摊平再内联
 const addonLoader = fs.readFileSync('vendor/addons/FBXLoader.js', 'utf8');
@@ -100,12 +101,14 @@ const inline = `${coreS}\n${modS}\nconst THREE = { ${threeList} };\n${zipLib}\n$
 let html = fs.readFileSync('index.html', 'utf8');
 
 let removed = 0;
-html = html.replace(/[ \t]*<script src="\.\/(?:zip|fbx-exporter|model-kit|ronk-ups|clamp-meter|earth-tester|multimeter|thermal-imager|rugged-phone|multimeter-2|air-detector|kindergarten-frame|hikvision-column-speaker|poe-security-switch|nvr|dome-camera|ptz-camera|poe-switch-8|fiber-odf|monitor-4k|video-server|security-platform|ip-intercom|paging-microphone|positioner-signal-source|positioner-test-connectors|leak-detector-sprayer)\.js"><\/script>\r?\n?/g, () => {
+const inlineScriptFiles = new Set(['zip.js', 'fbx-exporter.js', ...modelFiles]);
+html = html.replace(/[ \t]*<script src="\.\/([^"\r\n]+)"><\/script>\r?\n?/g, (tag, file) => {
+  if (!inlineScriptFiles.has(file)) return tag;
   removed++;
   return '';
 });
-if (removed !== 27) {
-  console.error('index.html 里的外部脚本标签数量异常(期望 27 个,实际 ' + removed + ' 个)');
+if (removed !== inlineScriptFiles.size) {
+  console.error('index.html 里的外部脚本标签数量异常(期望 ' + inlineScriptFiles.size + ' 个,实际 ' + removed + ' 个)');
   process.exit(1);
 }
 

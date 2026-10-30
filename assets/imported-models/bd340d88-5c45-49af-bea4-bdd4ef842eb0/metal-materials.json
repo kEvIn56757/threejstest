@@ -1,0 +1,27 @@
+{
+  "modelId": "bd340d88-5c45-49af-bea4-bdd4ef842eb0",
+  "description": "排污模型金属材质补全：银灰钢材、较光滑不锈钢、粗糙铸钢外壳。保留原材质名称和节点分配，BL 材质不变。",
+  "materials": [
+    {
+      "name": "L1_GLQFLQ_01_D",
+      "color": "#9ba5ad",
+      "metalness": 0.85,
+      "roughness": 0.37,
+      "envMapIntensity": 1.0
+    },
+    {
+      "name": "Metal",
+      "color": "#c3cbd1",
+      "metalness": 0.95,
+      "roughness": 0.24,
+      "envMapIntensity": 1.1
+    },
+    {
+      "name": "外壳",
+      "color": "#7c8993",
+      "metalness": 0.80,
+      "roughness": 0.43,
+      "envMapIntensity": 1.0
+    }
+  ]
+}
