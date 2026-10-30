@@ -7,7 +7,7 @@
     "dev": "node serve.js",
     "build": "node build-single.js && node fix-collisions.js",
     "vendor": "node tools/vendor-addons.js",
-    "test": "node --test tools/project-model-store.test.js tools/fbx-exporter.test.js"
+    "test": "node --test tools/project-model-store.test.js tools/fbx-exporter.test.js tools/leak-detector-sprayer.test.js"
   },
   "keywords": [],
   "author": "",

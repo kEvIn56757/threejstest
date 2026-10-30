@@ -80445,7 +80445,7 @@ class WebGLRenderer {
 
 
 
-const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CapsuleGeometry, CatmullRomCurve3, CircleGeometry, ConeGeometry, CurvePath, CylinderGeometry, DirectionalLight, DoubleSide, EquirectangularReflectionMapping, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, LatheGeometry, LineCurve3, LoadingManager, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, ObjectLoader, PCFShadowMap, Path, PerspectiveCamera, PlaneGeometry, RepeatWrapping, SRGBColorSpace, Scene, ShadowMaterial, Shape, ShapeGeometry, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, TubeGeometry, Vector2, Vector3, WebGLRenderer };
+const THREE = { ACESFilmicToneMapping, BackSide, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CapsuleGeometry, CatmullRomCurve3, CircleGeometry, ConeGeometry, CubicBezierCurve3, CurvePath, CylinderGeometry, DirectionalLight, DoubleSide, EquirectangularReflectionMapping, ExtrudeGeometry, Float32BufferAttribute, Group, HemisphereLight, LatheGeometry, LineCurve3, LoadingManager, MathUtils, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, ObjectLoader, PCFShadowMap, Path, PerspectiveCamera, PlaneGeometry, RepeatWrapping, SRGBColorSpace, Scene, ShadowMaterial, Shape, ShapeGeometry, Sphere, SphereGeometry, Spherical, Timer, TorusGeometry, TubeGeometry, Vector2, Vector3, WebGLRenderer };
 // zip.js — 零依赖 ZIP 打包器(浏览器端),用于把「模型 + 多张贴图」合成一个压缩包
 // 暴露 window.ZipPack.makeZip(files, {compress}) -> Promise<Uint8Array>
 //   files: [{ name: 'model.fbx', data: Uint8Array }, ...]
@@ -91351,6 +91351,11 @@ function buildLeakDetectorSprayer(THREE) {
     g.rotateZ(-Math.PI / 2);
     return add(g, material, name, parent, x, y, z);
   }
+  function cylinderZ(r, length, material, name, x, y, z = 0, parent = root) {
+    const g = new THREE.CylinderGeometry(r, r, length, 32);
+    g.rotateX(Math.PI / 2);
+    return add(g, material, name, parent, x, y, z);
+  }
   function torusY(r, tube, material, name, y, x = 0, z = 0, parent = root) {
     const g = new THREE.TorusGeometry(r, tube, 10, 64);
     g.rotateX(Math.PI / 2);
@@ -91414,73 +91419,92 @@ function buildLeakDetectorSprayer(THREE) {
   }
   torusY(2.14, 0.09, white, 'closure_upper_rim', 15.24, 0, 0, shell);
 
-  // One moulded shroud, not a rectangular box perched on the closure. The rear
-  // sweeps down into a palm rest and the lower edge arches over the finger well.
+  // The shroud sits above the cap rather than cutting through its knurling.
+  // A short central seat joins the two; the front overhang carries the trigger.
   const housingShape = new THREE.Shape();
-  housingShape.moveTo(-2.02, 14.46);
-  housingShape.bezierCurveTo(-2.32, 14.65, -2.55, 15.06, -2.49, 15.75);
-  housingShape.lineTo(-2.36, 16.36);
-  housingShape.quadraticCurveTo(-2.28, 16.82, -1.74, 16.88);
-  housingShape.lineTo(1.52, 16.88);
-  housingShape.quadraticCurveTo(2.14, 16.85, 2.25, 16.30);
-  housingShape.lineTo(2.25, 15.62);
-  housingShape.quadraticCurveTo(2.20, 15.12, 1.63, 15.02);
-  housingShape.lineTo(0.42, 14.98);
-  housingShape.bezierCurveTo(-0.26, 14.89, -0.54, 14.30, -0.73, 13.80);
-  housingShape.bezierCurveTo(-0.90, 13.33, -1.22, 13.10, -1.58, 13.16);
-  housingShape.bezierCurveTo(-1.94, 13.23, -2.03, 13.76, -2.02, 14.46);
+  housingShape.moveTo(-2.12, 15.54);
+  housingShape.bezierCurveTo(-2.47, 15.57, -2.62, 15.94, -2.47, 16.50);
+  housingShape.lineTo(-2.30, 16.95);
+  housingShape.quadraticCurveTo(-2.15, 17.24, -1.65, 17.24);
+  housingShape.lineTo(1.55, 17.24);
+  housingShape.quadraticCurveTo(2.18, 17.22, 2.40, 16.78);
+  housingShape.lineTo(2.62, 16.12);
+  housingShape.quadraticCurveTo(2.87, 15.66, 2.50, 15.54);
+  housingShape.lineTo(-2.12, 15.54);
   const housingGeo = new THREE.ExtrudeGeometry(housingShape, {
-    depth: 2.70, bevelEnabled: true, bevelSize: 0.16, bevelThickness: 0.16,
+    depth: 2.38, bevelEnabled: true, bevelSize: 0.12, bevelThickness: 0.12,
     bevelSegments: 5, curveSegments: 24,
   });
-  housingGeo.translate(0, 0, -1.35);
+  housingGeo.translate(0, 0, -1.19);
   add(housingGeo, white, 'pump_main_housing', shell);
-  roundSlab(3.25, 0.34, 2.82, 0.13, whiteDark, 'pump_lower_joint', 0.14, 14.92, 0, shell);
-  // Horizontal nozzle barrel, rotary tip and concentric spray outlet.
-  cylinderX(1.04, 3.00, white, 'nozzle_barrel', 2.77, 16.12, 0, shell);
-  cylinderX(1.14, 0.38, whiteDark, 'nozzle_barrel_joint', 4.20, 16.12, 0, shell);
-  cylinderX(1.02, 1.48, black, 'adjustable_nozzle', 4.93, 16.12, 0, shell);
+  cylinder(1.24, 1.24, 0.28, whiteDark, 'pump_lower_joint', 15.44, 0, 0, shell);
+
+  // Coaxial nested sleeves. The end is an annulus with a recessed bore, not
+  // overlapping solid disks or a metal pin projecting out of the spray opening.
+  const nozzleY = 16.42;
+  cylinderX(0.72, 2.50, white, 'nozzle_barrel', 3.00, nozzleY, 0, shell);
+  cylinderX(0.80, 0.20, whiteDark, 'nozzle_barrel_joint', 4.25, nozzleY, 0, shell);
+  const nozzleProfile = [
+    [0.73, -0.64], [0.80, -0.55], [0.80, 0.45], [0.73, 0.58],
+    [0.16, 0.58], [0.16, 0.25], [0.60, 0.25], [0.60, -0.64], [0.73, -0.64],
+  ].map(p => new THREE.Vector2(...p));
+  const nozzleGeo = new THREE.LatheGeometry(nozzleProfile, 64);
+  nozzleGeo.rotateZ(-Math.PI / 2);
+  add(nozzleGeo, black, 'adjustable_nozzle', shell, 4.82, nozzleY);
   for (let i = 0; i < 28; i++) {
     const a = i * Math.PI * 2 / 28;
-    const rib = add(new THREE.BoxGeometry(1.12, 0.075, 0.10), black,
-      `nozzle_grip_rib_${i}`, shell, 4.95, 16.12 + Math.cos(a) * 1.01, Math.sin(a) * 1.01);
+    const rib = add(new THREE.BoxGeometry(0.82, 0.05, 0.09), black,
+      `nozzle_grip_rib_${i}`, shell, 4.82, nozzleY + Math.cos(a) * 0.797, Math.sin(a) * 0.797);
     rib.rotation.x = a;
   }
-  cylinderX(0.91, 0.15, black, 'nozzle_front_face', 5.72, 16.12, 0, shell);
-  torusX(0.40, 0.09, whiteDark, 'spray_orifice_ring', 5.82, 16.12, 0, shell);
-  cylinderX(0.23, 0.08, rubber, 'spray_orifice', 5.84, 16.12, 0, shell);
-  cylinderX(0.075, 0.09, steel, 'spray_outlet_pin', 5.88, 16.12, 0, shell);
+  torusX(0.21, 0.035, whiteDark, 'spray_orifice_ring', 5.405, nozzleY, 0, shell);
+  cylinderX(0.17, 0.035, rubber, 'spray_orifice', 5.03, nozzleY, 0, shell);
 
-  // Cantilevered two-finger trigger: a short upper crank, a forward-bowed blade
-  // and a hooked lower tip. Its thin section leaves a generous rear finger well.
+  // The whole blade is forward of the closure/shoulder, leaving finger clearance.
+  // Geometry is local to the hinge so its exported pivot remains useful.
+  const triggerPivot = new THREE.Vector3(2.42, 15.74, 0);
+  const triggerAssembly = new THREE.Group();
+  triggerAssembly.name = 'trigger_hinged_assembly';
+  triggerAssembly.position.copy(triggerPivot); shell.add(triggerAssembly);
   const triggerShape = new THREE.Shape();
-  triggerShape.moveTo(0.35, 15.08);
-  triggerShape.lineTo(1.52, 15.16);
-  triggerShape.quadraticCurveTo(1.89, 15.14, 1.98, 14.79);
-  triggerShape.bezierCurveTo(2.12, 14.05, 2.47, 13.35, 3.11, 12.72);
-  triggerShape.bezierCurveTo(3.38, 12.47, 3.53, 12.19, 3.39, 11.99);
-  triggerShape.quadraticCurveTo(3.23, 11.78, 2.93, 11.92);
-  triggerShape.bezierCurveTo(2.20, 12.28, 1.72, 13.08, 1.31, 13.90);
-  triggerShape.lineTo(0.77, 14.87);
-  triggerShape.quadraticCurveTo(0.59, 15.10, 0.35, 15.08);
+  triggerShape.moveTo(2.27, 15.84);
+  triggerShape.lineTo(2.67, 15.84);
+  triggerShape.quadraticCurveTo(2.95, 15.69, 2.99, 15.31);
+  triggerShape.bezierCurveTo(3.08, 14.60, 3.52, 13.58, 4.32, 12.72);
+  triggerShape.quadraticCurveTo(4.58, 12.45, 4.53, 12.20);
+  triggerShape.quadraticCurveTo(4.50, 11.98, 4.25, 12.11);
+  triggerShape.bezierCurveTo(3.34, 12.63, 2.67, 13.72, 2.35, 14.78);
+  triggerShape.lineTo(2.42, 15.33);
+  triggerShape.quadraticCurveTo(2.21, 15.63, 2.27, 15.84);
   const triggerGeo = new THREE.ExtrudeGeometry(triggerShape, {
-    depth: 1.34, bevelEnabled: true, bevelSize: 0.055, bevelThickness: 0.055,
+    depth: 1.08, bevelEnabled: true, bevelSize: 0.045, bevelThickness: 0.045,
     bevelSegments: 3, curveSegments: 28,
   });
-  triggerGeo.translate(0, 0, -0.67);
-  add(triggerGeo, black, 'continuous_curved_trigger_blade', shell);
-  // Finger grooves follow the forward contact surface of the lower blade.
+  triggerGeo.translate(-triggerPivot.x, -triggerPivot.y, -0.54);
+  const trigger = add(triggerGeo, black, 'continuous_curved_trigger_blade', triggerAssembly);
+  trigger.userData.preservePivot = true;
+  // Small integral grip ribs follow the actual contact curve and are seated
+  // slightly into the blade, rather than floating across its side faces.
+  const contactCurve = new THREE.CubicBezierCurve3(
+    new THREE.Vector3(2.99, 15.31, 0), new THREE.Vector3(3.08, 14.60, 0),
+    new THREE.Vector3(3.52, 13.58, 0), new THREE.Vector3(4.32, 12.72, 0));
   for (let i = 0; i < 4; i++) {
-    const groove = roundSlab(0.30, 0.048, 1.30, 0.018, rubber,
-      `trigger_finger_groove_${i}`, 2.47 + i * 0.17, 13.07 - i * 0.19, 0, shell);
-    groove.rotation.z = -0.73;
+    const t = 0.35 + i * 0.14;
+    const p = contactCurve.getPoint(t), tangent = contactCurve.getTangent(t);
+    const outward = new THREE.Vector3(-tangent.y, tangent.x, 0).normalize();
+    p.addScaledVector(outward, -0.018).sub(triggerPivot);
+    tube([[p.x, p.y, -0.47], [p.x, p.y, 0], [p.x, p.y, 0.47]],
+      0.03, rubber, `trigger_finger_groove_${i}`, triggerAssembly, 8);
   }
-  cylinderX(0.18, 1.64, black, 'trigger_pivot_pin', 1.34, 14.95, 0, shell).rotation.y = Math.PI / 2;
+  cylinderZ(0.17, 2.68, black, 'trigger_pivot_pin', triggerPivot.x, triggerPivot.y, 0, shell);
+  for (const z of [-1.35, 1.35]) {
+    cylinderZ(0.22, 0.07, whiteDark, `trigger_hinge_boss_${z}`, triggerPivot.x, triggerPivot.y, z, shell);
+  }
 
   // Rear pressure vent and small safety lock on the pump housing.
-  cylinderX(0.31, 0.18, whiteDark, 'rear_pressure_vent', -1.98, 16.10, 0, shell);
-  cylinderX(0.12, 0.22, rubber, 'vent_opening', -2.08, 16.10, 0, shell);
-  roundSlab(0.68, 0.30, 0.18, 0.08, black, 'trigger_safety_lock', -0.33, 17.17, 1.72, shell);
+  cylinderX(0.23, 0.12, whiteDark, 'rear_pressure_vent', -2.49, 16.34, 0, shell);
+  cylinderX(0.10, 0.05, rubber, 'vent_opening', -2.575, 16.34, 0, shell);
+  roundSlab(0.68, 0.30, 0.14, 0.08, black, 'trigger_safety_lock', -0.33, 16.74, 1.34, shell);
 
   // Bottle label is a cylindrical print following the front (+X) curvature.
   const labelCanvas = document.createElement('canvas');
@@ -91539,13 +91563,14 @@ function buildLeakDetectorSprayer(THREE) {
     springPoints.push([0.47 * Math.cos(a), 15.1 + t * 1.58, 0.47 * Math.sin(a)]);
   }
   tube(springPoints, 0.055, steel, 'pump_return_spring', internals, 160);
-  cylinderX(0.31, 3.8, whiteDark, 'internal_liquid_channel', 2.2, 16.12, 0, internals);
-  cylinderX(0.11, 4.2, tubeMat, 'nozzle_feed_channel', 2.55, 16.12, 0, internals);
+  cylinderX(0.24, 3.7, whiteDark, 'internal_liquid_channel', 2.25, nozzleY, 0, internals);
+  cylinderX(0.10, 4.5, tubeMat, 'nozzle_feed_channel', 2.55, nozzleY, 0, internals);
   tube([[0,13.85,0],[0,12.65,0],[0.14,10.85,0],[0.38,7.3,0],[0.78,3.1,0],[1.16,1.25,0]],
     0.13, tubeMat, 'flexible_dip_tube', internals, 96);
-  const filter = cylinder(0.37, 0.37, 0.85, whiteDark, 'dip_tube_filter', 1.03, 1.21, 0, internals, 32);
-  filter.rotation.z = -0.20;
-  for (let i = 0; i < 6; i++) torusY(0.35, 0.035, steel, `filter_slot_${i}`, 0.74 + i * 0.105, 1.21, 0, internals);
+  const filterAssembly = new THREE.Group(); filterAssembly.name = 'dip_tube_filter_assembly';
+  filterAssembly.position.set(1.21, 1.20, 0); filterAssembly.rotation.z = -0.20; internals.add(filterAssembly);
+  cylinder(0.37, 0.37, 0.85, whiteDark, 'dip_tube_filter', 0, 0, 0, filterAssembly, 32);
+  for (let i = 0; i < 6; i++) torusY(0.35, 0.035, steel, `filter_slot_${i}`, -0.29 + i * 0.105, 0, 0, filterAssembly);
   cylinder(0.21, 0.21, 0.35, steel, 'inlet_check_ball', 13.39, 0, 0, internals, 24);
 
   MK.markShell(shell);
