@@ -21,3 +21,9 @@ assets/imported-models/*/backups/
 # Shader recovery copies and temporary Unity verification screenshots
 exports/Unity流动Shader/backup/
 exports/Unity流动Shader/*推进验证.png
+
+# 导出产物:体积已达 109 MB 且随时可由页面重新导出,不入库
+# (renames.json 不能忽略 —— fix-collisions.js 直接 readFileSync 且无兜底)
+# 例外:Unity 流动着色器是手写源码 + 使用说明,不是导出物
+exports/*
+!exports/Unity流动Shader/
